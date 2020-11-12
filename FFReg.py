@@ -184,10 +184,10 @@ def main():
     print(reg_monthly)
 
     # append monthly regression results when daily results are missing
-    reg_daily.append(reg_monthly[~reg_monthly.index.isin(reg_daily.index)]).to_csv('res_daily.csv', encoding='utf-8')
+    reg_daily.append(reg_monthly[~reg_monthly.index.isin(reg_daily.index)]).to_csv('results\\reg_daily.csv', encoding='utf-8')
 
     # export regression results to csv
-    reg_monthly.to_csv('res_monthly.csv', encoding='utf-8')
+    reg_monthly.to_csv('results\\reg_monthly.csv', encoding='utf-8')
 
 
 if __name__ == '__main__':
