@@ -6,13 +6,17 @@ import ntpath
 import pandas_datareader.data as web
 
 
-def get_forex_data(base_currency='EUR', to_currency='USD'):
+def get_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
 
     # get the EUR/USD rate data
-    fx = web.DataReader(base_currency + '/' + to_currency, 'av-forex-daily',
-                        api_key='6QAL8820E2NU81J2')['close'].to_frame(name='FX')
-    fx.index = pd.to_datetime(fx.index).to_period("B")
-    fx.index.name='Date'
+    try:
+        fx = pd.read_pickle(cache_dir + base_currency + '-' + to_currency)
+    except:
+        fx = web.DataReader(base_currency + '/' + to_currency, 'av-forex-daily',
+                            api_key='6QAL8820E2NU81J2')['close'].to_frame(name='FX')
+        fx.index = pd.to_datetime(fx.index).to_period("B")
+        fx.index.name='Date'
+        fx.to_pickle(cache_dir + base_currency + '-' + to_currency)
 
     return fx
 
