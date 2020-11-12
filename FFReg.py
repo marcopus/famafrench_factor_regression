@@ -152,9 +152,11 @@ def main():
 
     # initialize dataframe for daily regression results
     reg_daily = pd.DataFrame()
+    reg_daily.index.name = 'ISIN'
     
     # initialize dataframe for monthly regression results
     reg_monthly = pd.DataFrame()
+    reg_monthly.index.name = 'ISIN'
 
     for fund in funds.itertuples():
 
