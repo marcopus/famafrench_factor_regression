@@ -4,6 +4,7 @@ import statsmodels.api as sm
 from glob import glob
 import ntpath
 import pandas_datareader.data as web
+import os
 
 
 def get_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
@@ -12,8 +13,10 @@ def get_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
     try:
         fx = pd.read_pickle(cache_dir + base_currency + '-' + to_currency)
     except:
-        fx = web.DataReader(base_currency + '/' + to_currency, 'av-forex-daily',
-                            api_key='6QAL8820E2NU81J2')['close'].to_frame(name='FX')
+        if not os.getenv('ALPHAVANTAGE_API_KEY'):
+            raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable to retrieve forex data!")
+        fx = web.DataReader(base_currency + '/' + to_currency,
+                            'av-forex-daily')['close'].to_frame(name='FX')
         fx.index = pd.to_datetime(fx.index).to_period("B")
         fx.index.name='Date'
         fx.to_pickle(cache_dir + base_currency + '-' + to_currency)
@@ -59,7 +62,6 @@ def calc_return(fund_id, freq, fund_currency=None):
 def get_famafrench_data(name_factor_data, name_mom_data, cache_dir='famafrench\\'):
     
     if name_factor_data:
-        print('Retrieving ' + name_factor_data + '...')
         try:
             factor_data = pd.read_pickle(cache_dir + name_factor_data)
         except:
@@ -101,6 +103,60 @@ def calc_famafrench_regression(factor_data, fund_data, fund_id):
         print('No daily factor data!')
         reg = pd.DataFrame()
     return reg
+
+
+def run_fund_reg_daily(fund_id, fund_category, fund_currency='USD'):
+
+    if 'US' in fund_category:
+        name_factor_data = 'F-F_Research_Data_5_Factors_2x3_daily'
+    if 'Global' in fund_category and not 'Emerging' in fund_category:
+        name_factor_data = 'Developed_5_Factors_Daily'
+    if 'Europe' in fund_category or 'Eurozone' in fund_category:
+        name_factor_data = 'Europe_5_Factors_Daily'
+    if 'US' in fund_category:
+        name_mom_data = 'F-F_Momentum_Factor_daily'
+    if 'Global' in fund_category and not 'Emerging' in fund_category:
+        name_mom_data = 'Developed_Mom_Factor_Daily'
+    if 'Europe' in fund_category or 'Eurozone' in fund_category:
+        name_mom_data = 'Europe_Mom_Factor_Daily'
+
+    # retrieve fama-french daily factor data
+    FF = get_famafrench_data(name_factor_data, name_mom_data)
+    
+    # calculate daily returns
+    ret = calc_return(fund_id, freq='daily', fund_currency=fund_currency)
+    
+    # calculating regression
+    return calc_famafrench_regression(FF, ret, fund_id)
+
+
+def run_fund_reg_monthly(fund_id, fund_category, fund_currency='USD'):
+
+    if 'Emerging' in fund_category:
+        name_factor_data = 'Emerging_5_Factors'
+    if 'US' in fund_category:
+        name_factor_data = 'F-F_Research_Data_5_Factors_2x3'
+    if 'Global' in fund_category and not 'Emerging' in fund_category:
+        name_factor_data = 'Developed_5_Factors'
+    if 'Europe' in fund_category or 'Eurozone' in fund_category:
+        name_factor_data = 'Europe_5_Factors'
+    if 'Emerging' in fund_category:
+        name_factor_data = 'Emerging_MOM_Factor'
+    if 'US' in fund_category:
+        name_mom_data = 'F-F_Momentum_Factor'
+    if 'Global' in fund_category and not 'Emerging' in fund_category:
+        name_mom_data = 'Developed_Mom_Factor'
+    if 'Europe' in fund_category or 'Eurozone' in fund_category:
+        name_mom_data = 'Europe_Mom_Factor'
+
+    # retrieve fama-french monthly factor data
+    FF = get_famafrench_data(name_factor_data, name_mom_data)
+    
+    # calculate monthly returns
+    ret = calc_return(fund_id, freq='monthly', fund_currency=fund_currency)
+    
+    # calculating regression
+    return calc_famafrench_regression(FF, ret, fund_id)
 
 
 def main():
