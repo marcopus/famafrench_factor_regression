@@ -7,6 +7,23 @@ import pandas_datareader.data as web
 import os
 
 
+def get_yahoo_fund_currency(fund_ticker):
+    json = pd.read_json('https://query1.finance.yahoo.com/v8/finance/chart/' + fund_ticker)
+    return json['chart']['result'][0]['meta']['currency']
+
+
+def get_yahoo_price_data(fund_ticker, cache_dir='price\\'):
+    try:
+        price = pd.read_pickle(cache_dir + fund_ticker)
+    except:
+        price = pd.read_csv('https://query1.finance.yahoo.com/v7/finance/download/' +
+            fund_ticker + '?period1=0&period2=10000000000&interval=1d&events=history&includeAdjustedClose=true',
+            usecols=['Date', 'Adj Close'], index_col=['Date'])
+        price.index = pd.to_datetime(price.index).to_period("B")
+        price.to_pickle(cache_dir + fund_ticker)
+    return price
+
+
 def get_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
 
     # get the EUR/USD rate data
@@ -24,13 +41,22 @@ def get_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
     return fx
 
 
-def get_price_data(fund_id, fund_currency, convert_currency=True):
+def get_excel_price_data(fund_id):
     
     # read the price data from file
     price = pd.read_excel('Price Data\\' + fund_id + '.xlsx', sheet_name='Price_Daily', index_col=0)
     
     # convert the index to date period format
     price.index = pd.to_datetime(price.index, format='%Y%m%d').to_period("B")
+        
+    return price
+    
+
+
+def calc_return(fund_id, freq, fund_currency=None, convert_currency=True):
+    
+    #get the fund price data
+    price = get_price_data(fund_id, fund_currency=fund_currency)
 
     # convert NAV to USD
     if not fund_currency==None and not fund_currency=='USD' and convert_currency:
@@ -38,15 +64,6 @@ def get_price_data(fund_id, fund_currency, convert_currency=True):
         price = price.merge(fx, left_on='Date', right_on='Date')
         price.NAV = price.NAV * price.FX
         price.drop('FX', axis=1, inplace=True)
-        
-    return price
-    
-
-
-def calc_return(fund_id, freq, fund_currency=None):
-    
-    #get the fund price data
-    price = get_price_data(fund_id, convert_currency=True, fund_currency=fund_currency)
 
     # calculate daily returns
     if freq=='daily':
