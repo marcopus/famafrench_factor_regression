@@ -5,22 +5,103 @@ from glob import glob
 import ntpath
 import pandas_datareader.data as web
 import os
+import runcurl
 
 
-def get_yahoo_fund_currency(fund_ticker):
-    json = pd.read_json('https://query1.finance.yahoo.com/v8/finance/chart/' + fund_ticker)
+def get_morningstar_fund_name(fund_isin):
+
+    # curl string to obtain some morningstar fund info
+    curlstr = "curl 'https://www.morningstar.com/api/v1/search/securities?q=" + fund_isin + "&region=international&limit=50' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0' -H 'Accept: application/json, text/plain, */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://www.morningstar.com/search?query=IE00BFY0GT14' -H 'x-api-key: Nrc2ElgzRkaTE43D5vA7mrWj2WpSBR35fvmaqfte' -H 'DNT: 1' -H 'Connection: keep-alive' -H 'Cookie: ASP.NET_SessionId=zdgbrkbblfiepa45gm4wjffg; _gcl_au=1.1.1480557771.1600715785; _uetsid=c33fb5d1faf382624c557dd389f438fb; _uetvid=11b9521be1a452a32efc4091dbb6616e; overlay_hibernation=Wed%2C%2023%20Sep%202020%2018:51:51%20GMT; intro_hibernation=Tue%2C%2022%20Sep%202020%2019:51:51%20GMT' -H 'TE: Trailers'"
+    req = runcurl.execute(curlstr)
+
+    # extract the morningstar fund info
+    if req.status_code == 200:
+        return req.json()['results'][0]['name']
+    else:
+        return None
+        print('Cannot find ' + fund_isin + ' on Morningstar!')
+
+    
+def get_morningstar_fund_category(fund_isin):
+    
+    # curl string to obtain the morningstar fund id
+    curlstr = "curl 'https://www.morningstar.com/api/v1/search/securities?q=" + fund_isin + "&region=international&limit=50' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0' -H 'Accept: application/json, text/plain, */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://www.morningstar.com/search?query=IE00BFY0GT14' -H 'x-api-key: Nrc2ElgzRkaTE43D5vA7mrWj2WpSBR35fvmaqfte' -H 'DNT: 1' -H 'Connection: keep-alive' -H 'Cookie: ASP.NET_SessionId=zdgbrkbblfiepa45gm4wjffg; _gcl_au=1.1.1480557771.1600715785; _uetsid=c33fb5d1faf382624c557dd389f438fb; _uetvid=11b9521be1a452a32efc4091dbb6616e; overlay_hibernation=Wed%2C%2023%20Sep%202020%2018:51:51%20GMT; intro_hibernation=Tue%2C%2022%20Sep%202020%2019:51:51%20GMT' -H 'TE: Trailers'"
+    req = runcurl.execute(curlstr)
+
+    # extract the morningstar fund id
+    if req.status_code == 200:
+        secId = req.json()['results'][0]['secId']
+    else:
+        return None
+        print('Cannot find ' + fund_isin + ' on Morningstar!')
+    
+    # curl string to obtain the morningstar fund info
+    curlstr = "curl 'https://api-global.morningstar.com/sal-service/v1/etf/process/asset/v2/" + secId + "/data?locale=en&clientId=MDC&benchmarkId=category&version=3.31.0' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:81.0) Gecko/20100101 Firefox/81.0' -H 'Accept: application/json, text/plain, */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://www.morningstar.com/etfs/xetr/exsa/portfolio' -H 'X-API-REALTIME-E: eyJlbmMiOiJBMTI4R0NNIiwiYWxnIjoiUlNBLU9BRVAifQ.XmuAS3x5r-0MJuwLDdD4jNC6zjsY7HAFNo2VdvGg6jGcj4hZ4NaJgH20ez313H8An9UJrsUj8ERH0R8UyjQu2UGMUnJ5B1ooXFPla0LQEbN_Em3-IG84YPFcWVmEgcs1Fl2jjlKHVqZp04D21UvtgQ4xyPwQ-QDdTxHqyvSCpcE.ACRnQsNuTh1K_C9R.xpLNZ8Cc9faKoOYhss1CD0A4hG4m0M7-LZQ0fISw7NUHwzQs2AEo9ZXfwOvAj1fCbcE96mbKQo8gr7Oq1a2-piYXM1X5yNMcCxEaYyGinpnf6PGqbdr6zbYZdqyJk0KrxWVhKSQchLJaLGJOts4GlpqujSqJObJQcWWbkJQYKG9K7oKsdtMAKsHIVo5-0BCUbjKVnHJNsYwTsI7xn2Om8zGm4A.nBOuiEDssVFHC_N68tDjVA' -H 'X-SAL-ContentType: e7FDDltrTy+tA2HnLovvGL0LFMwT+KkEptGju5wXVTU=' -H 'X-API-RequestId: ae855627-097b-9bb0-a2dd-92925520bce1' -H 'ApiKey: lstzFDEOhfFNMLikKa0am9mgEKLBl49T' -H 'Origin: https://www.morningstar.com' -H 'Connection: keep-alive' -H 'TE: Trailers'"
+    req = runcurl.execute(curlstr)
+
+    if req.status_code == 200:
+        return req.json()['categoryName']
+    else:
+        return None
+        print('Cannot get info on ' + fund_isin + ' on Morningstar!')
+    
+
+def get_yahoo_fund_symbol(fund_isin, fund_exchange=None):
+    '''
+    fund_exchange is typically one of 'AMS', 'LSE', 'GER', 'MIL', 'FRA'
+        if omitted, it will prompt for interactive selection
+    '''
+
+    fund_name = get_morningstar_fund_name(fund_isin)
+
+    i = 1
+
+    while True:
+        # curl string to obtain the yahoo symbols given the fund name
+        curlstr = "curl 'https://query1.finance.yahoo.com/v1/finance/search?q=" + fund_name[:-i] + "&lang=en-US&region=US&quotesCount=6&newsCount=4&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query&newsQueryId=news_cie_vespa&enableCb=true&enableNavLinks=true&enableEnhancedTrivialQuery=true' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:82.0) Gecko/20100101 Firefox/82.0' -H 'Accept: */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://finance.yahoo.com/screener?.tsrc=fin-srch' -H 'Origin: https://finance.yahoo.com' -H 'Connection: keep-alive' -H 'Cookie: B=bvg32mtd9ql9o&b=3&s=uq; GUC=AQABAgFfO-NgIUIgrgSo; PRF=t%3DVGWL.F%252BVDVA.L%252BVVAL.AS%252BVVAL.L%252BVVL.TO%252BZPRX.DE%252BEURUSD%253DX%252B%255EGSPC%252BES%253DF%252BBRK-B%252BBRKB%252BWORK%252BVEIEX%252BXDEV.DE%252BVVAL.SW%26qct%3DtrendArea; ucs=eup=2; A1=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk; A3=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk; A1S=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk&j=GDPR; thamba=1' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' -H 'TE: Trailers'"
+        req = runcurl.execute(curlstr)
+        
+        # extract the yahoo fund symbol
+        if req.status_code == 200:
+            n = len(req.json()['quotes'])
+
+        # increment # characters to delete from the fund name until results are found
+        if n == 0:
+            i += 1
+        else:
+            break
+    
+    # search the exchange when not provided
+    if not fund_exchange:
+        # interactive exchange selection
+        if n > 1:
+            print('Multiple funds found:')
+            funds = [(quote['longname'], quote['exchange']) for quote in req.json()['quotes']]
+            print(*enumerate(funds, 1), sep='\n')
+            fund_number = input('Please make a selection: ')
+            fund_exchange = req.json()['quotes'][int(fund_number)]['exchange']
+        else:
+            fund_exchange = req.json()['quotes'][0]['exchange']
+
+    # select the symbol corresponding to the desired exchange
+    return list(filter(lambda quote: quote['exchange'] == fund_exchange, req.json()['quotes']))[0]['symbol']
+
+
+def get_yahoo_fund_currency(fund_symbol):
+    json = pd.read_json('https://query1.finance.yahoo.com/v8/finance/chart/' + fund_symbol)
     return json['chart']['result'][0]['meta']['currency']
 
 
-def get_yahoo_price_data(fund_ticker, cache_dir='price\\'):
+def get_yahoo_price_data(fund_symbol, cache_dir='price\\'):
     try:
-        price = pd.read_pickle(cache_dir + fund_ticker)
+        price = pd.read_pickle(cache_dir + fund_symbol)
     except:
         price = pd.read_csv('https://query1.finance.yahoo.com/v7/finance/download/' +
-            fund_ticker + '?period1=0&period2=10000000000&interval=1d&events=history&includeAdjustedClose=true',
-            usecols=['Date', 'Adj Close'], index_col=['Date'])
+            fund_symbol + '?period1=0&period2=10000000000&interval=1d&events=history&includeAdjustedClose=true',
+            header = 0, names = ['Date', 'Open', 'High', 'Low', 'Close', 'NAV', 'Volume'],
+            usecols=['Date', 'NAV'], index_col=['Date'])
         price.index = pd.to_datetime(price.index).to_period("B")
-        price.to_pickle(cache_dir + fund_ticker)
+        price.to_pickle(cache_dir + fund_symbol)
     return price
 
 
@@ -41,25 +122,29 @@ def get_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
     return fx
 
 
-def get_excel_price_data(fund_id):
+def get_excel_price_data(fund_isin):
     
     # read the price data from file
-    price = pd.read_excel('Price Data\\' + fund_id + '.xlsx', sheet_name='Price_Daily', index_col=0)
+    price = pd.read_excel('Price Data\\' + fund_isin + '.xlsx', sheet_name='Price_Daily', index_col=0)
     
     # convert the index to date period format
     price.index = pd.to_datetime(price.index, format='%Y%m%d').to_period("B")
         
     return price
-    
 
 
-def calc_return(fund_id, freq, fund_currency=None, convert_currency=True):
+def get_price_data(fund_isin):
+    fund_symbol = get_yahoo_fund_symbol(fund_isin)
+    return get_yahoo_price_data(fund_symbol, cache_dir='price\\'), get_yahoo_fund_currency(fund_symbol)
+
+
+def calc_return(fund_isin, freq, convert_currency=True):
     
-    #get the fund price data
-    price = get_price_data(fund_id, fund_currency=fund_currency)
+    #get the fund price data and currency
+    price, fund_currency = get_price_data(fund_isin)
 
     # convert NAV to USD
-    if not fund_currency==None and not fund_currency=='USD' and convert_currency:
+    if not fund_currency=='USD' and convert_currency:
         fx = get_forex_data(base_currency=fund_currency)
         price = price.merge(fx, left_on='Date', right_on='Date')
         price.NAV = price.NAV * price.FX
@@ -100,7 +185,7 @@ def get_famafrench_data(name_factor_data, name_mom_data, cache_dir='famafrench\\
     return factor_data
 
 
-def calc_famafrench_regression(factor_data, fund_data, fund_id):
+def calc_famafrench_regression(factor_data, fund_data, fund_isin):
     
     if not(factor_data.empty):
         X = fund_data.merge(factor_data, left_index=True, right_index=True)
@@ -114,7 +199,7 @@ def calc_famafrench_regression(factor_data, fund_data, fund_id):
         model.summary()
         res = model.params.copy()
         res[abs(model.tvalues)<1.96]=None
-        res.name = fund_id
+        res.name = fund_isin
         reg = res.to_frame().transpose()
     else:
         print('No daily factor data!')
@@ -122,7 +207,10 @@ def calc_famafrench_regression(factor_data, fund_data, fund_id):
     return reg
 
 
-def run_fund_reg_daily(fund_id, fund_category, fund_currency='USD'):
+def run_fund_reg_daily(fund_isin):
+
+    # obtain the fund category
+    fund_category = get_morningstar_fund_category(fund_isin)
 
     if 'US' in fund_category:
         name_factor_data = 'F-F_Research_Data_5_Factors_2x3_daily'
@@ -141,13 +229,16 @@ def run_fund_reg_daily(fund_id, fund_category, fund_currency='USD'):
     FF = get_famafrench_data(name_factor_data, name_mom_data)
     
     # calculate daily returns
-    ret = calc_return(fund_id, freq='daily', fund_currency=fund_currency)
+    ret = calc_return(fund_isin, freq='daily')
     
     # calculating regression
-    return calc_famafrench_regression(FF, ret, fund_id)
+    return calc_famafrench_regression(FF, ret, fund_isin)
 
 
-def run_fund_reg_monthly(fund_id, fund_category, fund_currency='USD'):
+def run_fund_reg_monthly(fund_isin, fund_category, fund_currency='USD'):
+
+    # obtain the fund category
+    fund_category = get_morningstar_fund_category(fund_isin)
 
     if 'Emerging' in fund_category:
         name_factor_data = 'Emerging_5_Factors'
@@ -170,10 +261,10 @@ def run_fund_reg_monthly(fund_id, fund_category, fund_currency='USD'):
     FF = get_famafrench_data(name_factor_data, name_mom_data)
     
     # calculate monthly returns
-    ret = calc_return(fund_id, freq='monthly', fund_currency=fund_currency)
+    ret = calc_return(fund_isin, freq='monthly')
     
     # calculating regression
-    return calc_famafrench_regression(FF, ret, fund_id)
+    return calc_famafrench_regression(FF, ret, fund_isin)
 
 
 def main():
@@ -270,4 +361,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    #main()
+    pass
