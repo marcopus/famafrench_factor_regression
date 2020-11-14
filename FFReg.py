@@ -79,7 +79,7 @@ def get_yahoo_fund_symbol(fund_isin, fund_exchange=None):
             funds = [(quote['longname'], quote['exchange']) for quote in req.json()['quotes']]
             print(*enumerate(funds, 1), sep='\n')
             fund_number = input('Please make a selection: ')
-            fund_exchange = req.json()['quotes'][int(fund_number)]['exchange']
+            fund_exchange = req.json()['quotes'][int(fund_number)-1]['exchange']
         else:
             fund_exchange = req.json()['quotes'][0]['exchange']
 
