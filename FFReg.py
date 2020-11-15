@@ -9,14 +9,16 @@ import runcurl
 
 
 def get_morningstar_fund_name(fund_isin):
-
+    
     # curl string to obtain some morningstar fund info
     curlstr = "curl 'https://www.morningstar.com/api/v1/search/securities?q=" + fund_isin + "&region=international&limit=50' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0' -H 'Accept: application/json, text/plain, */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://www.morningstar.com/search?query=IE00BFY0GT14' -H 'x-api-key: Nrc2ElgzRkaTE43D5vA7mrWj2WpSBR35fvmaqfte' -H 'DNT: 1' -H 'Connection: keep-alive' -H 'Cookie: ASP.NET_SessionId=zdgbrkbblfiepa45gm4wjffg; _gcl_au=1.1.1480557771.1600715785; _uetsid=c33fb5d1faf382624c557dd389f438fb; _uetvid=11b9521be1a452a32efc4091dbb6616e; overlay_hibernation=Wed%2C%2023%20Sep%202020%2018:51:51%20GMT; intro_hibernation=Tue%2C%2022%20Sep%202020%2019:51:51%20GMT' -H 'TE: Trailers'"
     req = runcurl.execute(curlstr)
 
     # extract the morningstar fund info
     if req.status_code == 200:
-        return req.json()['results'][0]['name']
+        fund_name = req.json()['results'][0]['name']
+        print('Fund name Morningstar: ' + fund_name)
+        return fund_name
     else:
         return None
         print('Cannot find ' + fund_isin + ' on Morningstar!')
@@ -40,7 +42,9 @@ def get_morningstar_fund_category(fund_isin):
     req = runcurl.execute(curlstr)
 
     if req.status_code == 200:
-        return req.json()['categoryName']
+        fund_category = req.json()['categoryName']
+        print('Fund category Morningstar: ' + fund_category)
+        return fund_category
     else:
         return None
         print('Cannot get info on ' + fund_isin + ' on Morningstar!')
@@ -48,28 +52,18 @@ def get_morningstar_fund_category(fund_isin):
 
 def get_yahoo_fund_symbol(fund_isin, fund_exchange=None):
     '''
-    fund_exchange is typically one of 'AMS', 'LSE', 'GER', 'MIL', 'FRA'
-        if omitted, it will prompt for interactive selection
+    >EXPERIMENTAL< It does not work very well...
+    Fund_exchange is typically one of 'AMS', 'LSE', 'GER', 'MIL', 'FRA'. If
+    omitted, it will prompt for interactive selection.
     '''
 
-    fund_name = get_morningstar_fund_name(fund_isin)
-
-    i = 1
-
-    while True:
-        # curl string to obtain the yahoo symbols given the fund name
-        curlstr = "curl 'https://query1.finance.yahoo.com/v1/finance/search?q=" + fund_name[:-i] + "&lang=en-US&region=US&quotesCount=6&newsCount=4&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query&newsQueryId=news_cie_vespa&enableCb=true&enableNavLinks=true&enableEnhancedTrivialQuery=true' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:82.0) Gecko/20100101 Firefox/82.0' -H 'Accept: */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://finance.yahoo.com/screener?.tsrc=fin-srch' -H 'Origin: https://finance.yahoo.com' -H 'Connection: keep-alive' -H 'Cookie: B=bvg32mtd9ql9o&b=3&s=uq; GUC=AQABAgFfO-NgIUIgrgSo; PRF=t%3DVGWL.F%252BVDVA.L%252BVVAL.AS%252BVVAL.L%252BVVL.TO%252BZPRX.DE%252BEURUSD%253DX%252B%255EGSPC%252BES%253DF%252BBRK-B%252BBRKB%252BWORK%252BVEIEX%252BXDEV.DE%252BVVAL.SW%26qct%3DtrendArea; ucs=eup=2; A1=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk; A3=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk; A1S=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk&j=GDPR; thamba=1' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' -H 'TE: Trailers'"
-        req = runcurl.execute(curlstr)
-        
-        # extract the yahoo fund symbol
-        if req.status_code == 200:
-            n = len(req.json()['quotes'])
-
-        # increment # characters to delete from the fund name until results are found
-        if n == 0:
-            i += 1
-        else:
-            break
+    # curl string to obtain the yahoo symbols given the fund name
+    curlstr = "curl 'https://query1.finance.yahoo.com/v1/finance/search?q=" + fund_isin + "&lang=en-US&region=US&quotesCount=6&newsCount=4&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query&newsQueryId=news_cie_vespa&enableCb=true&enableNavLinks=true&enableEnhancedTrivialQuery=true' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:82.0) Gecko/20100101 Firefox/82.0' -H 'Accept: */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://finance.yahoo.com/screener?.tsrc=fin-srch' -H 'Origin: https://finance.yahoo.com' -H 'Connection: keep-alive' -H 'Cookie: B=bvg32mtd9ql9o&b=3&s=uq; GUC=AQABAgFfO-NgIUIgrgSo; PRF=t%3DVGWL.F%252BVDVA.L%252BVVAL.AS%252BVVAL.L%252BVVL.TO%252BZPRX.DE%252BEURUSD%253DX%252B%255EGSPC%252BES%253DF%252BBRK-B%252BBRKB%252BWORK%252BVEIEX%252BXDEV.DE%252BVVAL.SW%26qct%3DtrendArea; ucs=eup=2; A1=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk; A3=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk; A1S=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk&j=GDPR; thamba=1' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' -H 'TE: Trailers'"
+    req = runcurl.execute(curlstr)
+    
+    # extract the yahoo fund symbol
+    if req.status_code == 200:
+        n = len(req.json()['quotes'])
     
     # search the exchange when not provided
     if not fund_exchange:
@@ -82,17 +76,26 @@ def get_yahoo_fund_symbol(fund_isin, fund_exchange=None):
             fund_exchange = req.json()['quotes'][int(fund_number)-1]['exchange']
         else:
             fund_exchange = req.json()['quotes'][0]['exchange']
+        print('Fund exchange Yahoo: ' + fund_exchange)
 
     # select the symbol corresponding to the desired exchange
-    return list(filter(lambda quote: quote['exchange'] == fund_exchange, req.json()['quotes']))[0]['symbol']
+    fund_symbol = list(filter(lambda quote: quote['exchange'] == fund_exchange, req.json()['quotes']))[0]['symbol']
+    print('Fund symbol Yahoo: ' + fund_symbol)
+    
+    return fund_symbol
 
 
 def get_yahoo_fund_currency(fund_symbol):
+    
     json = pd.read_json('https://query1.finance.yahoo.com/v8/finance/chart/' + fund_symbol)
-    return json['chart']['result'][0]['meta']['currency']
+    fund_currency = json['chart']['result'][0]['meta']['currency'].upper()
+    print('Fund currency Yahoo: ' + fund_currency)
+    
+    return fund_currency
 
 
 def get_yahoo_price_data(fund_symbol, cache_dir='price\\'):
+    
     try:
         price = pd.read_pickle(cache_dir + fund_symbol)
     except:
@@ -102,17 +105,35 @@ def get_yahoo_price_data(fund_symbol, cache_dir='price\\'):
             usecols=['Date', 'NAV'], index_col=['Date'])
         price.index = pd.to_datetime(price.index).to_period("B")
         price.to_pickle(cache_dir + fund_symbol)
+
+    print('Price data interval: ' + str(price.index[0]) + ' to ' + str(price.index[-1]))
     return price
 
 
-def get_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
+def get_av_price_data(fund_symbol, cache_dir='price\\'):
+
+    try:
+        price = pd.read_pickle(cache_dir + fund_symbol)
+    except:
+        if not os.getenv('ALPHAVANTAGE_API_KEY'):
+            raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable!")
+        price = web.DataReader(fund_symbol, 'av-daily-adjusted')['adjusted close'].to_frame(name='NAV')
+        price.index = pd.to_datetime(price.index).to_period("B")
+        price.index.name='Date'
+        price.to_pickle(cache_dir + fund_symbol)
+
+    print('Price data interval: ' + str(price.index[0]) + ' to ' + str(price.index[-1]))
+    return price
+
+
+def get_av_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
 
     # get the EUR/USD rate data
     try:
         fx = pd.read_pickle(cache_dir + base_currency + '-' + to_currency)
     except:
         if not os.getenv('ALPHAVANTAGE_API_KEY'):
-            raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable to retrieve forex data!")
+            raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable!")
         fx = web.DataReader(base_currency + '/' + to_currency,
                             'av-forex-daily')['close'].to_frame(name='FX')
         fx.index = pd.to_datetime(fx.index).to_period("B")
@@ -133,9 +154,19 @@ def get_excel_price_data(fund_isin):
     return price
 
 
-def get_price_data(fund_isin):
-    fund_symbol = get_yahoo_fund_symbol(fund_isin)
-    return get_yahoo_price_data(fund_symbol, cache_dir='price\\'), get_yahoo_fund_currency(fund_symbol)
+def get_price_data(fund_symbol):
+    
+    return get_av_price_data(fund_symbol), get_yahoo_fund_currency(fund_symbol)
+
+
+def convert_price_to_USD(price, fund_currency):
+
+    fx = get_av_forex_data(base_currency=fund_currency)
+    price = price.merge(fx, left_on='Date', right_on='Date')
+    price.NAV = price.NAV * price.FX
+    price.drop('FX', axis=1, inplace=True)
+    
+    return price
 
 
 def calc_return(fund_isin, freq, convert_currency=True):
@@ -143,16 +174,14 @@ def calc_return(fund_isin, freq, convert_currency=True):
     #get the fund price data and currency
     price, fund_currency = get_price_data(fund_isin)
 
-    # convert NAV to USD
+    # convert price to USD
     if not fund_currency=='USD' and convert_currency:
-        fx = get_forex_data(base_currency=fund_currency)
-        price = price.merge(fx, left_on='Date', right_on='Date')
-        price.NAV = price.NAV * price.FX
-        price.drop('FX', axis=1, inplace=True)
+        price = convert_price_to_USD(price, fund_currency)
 
     # calculate daily returns
     if freq=='daily':
         ret = price.NAV.pct_change()[1:].to_frame(name='Return')
+        ret = ret[ret.all(1)]
 
     # calculate monthly returns
     if freq=='monthly':
@@ -185,7 +214,7 @@ def get_famafrench_data(name_factor_data, name_mom_data, cache_dir='famafrench\\
     return factor_data
 
 
-def calc_famafrench_regression(factor_data, fund_data, fund_isin):
+def calc_famafrench_regression(factor_data, fund_data, fund_symbol):
     
     if not(factor_data.empty):
         X = fund_data.merge(factor_data, left_index=True, right_index=True)
@@ -199,7 +228,7 @@ def calc_famafrench_regression(factor_data, fund_data, fund_isin):
         model.summary()
         res = model.params.copy()
         res[abs(model.tvalues)<1.96]=None
-        res.name = fund_isin
+        res.name = fund_symbol
         reg = res.to_frame().transpose()
     else:
         print('No daily factor data!')
@@ -207,7 +236,7 @@ def calc_famafrench_regression(factor_data, fund_data, fund_isin):
     return reg
 
 
-def run_fund_reg_daily(fund_isin):
+def run_fund_reg_daily(fund_symbol, fund_isin):
 
     # obtain the fund category
     fund_category = get_morningstar_fund_category(fund_isin)
@@ -224,21 +253,22 @@ def run_fund_reg_daily(fund_isin):
         name_mom_data = 'Developed_Mom_Factor_Daily'
     if 'Europe' in fund_category or 'Eurozone' in fund_category:
         name_mom_data = 'Europe_Mom_Factor_Daily'
+    print('Factor data: ' + name_factor_data)
 
     # retrieve fama-french daily factor data
     FF = get_famafrench_data(name_factor_data, name_mom_data)
     
     # calculate daily returns
-    ret = calc_return(fund_isin, freq='daily')
+    ret = calc_return(fund_symbol, freq='daily')
     
     # calculating regression
-    return calc_famafrench_regression(FF, ret, fund_isin)
+    return calc_famafrench_regression(FF, ret, fund_symbol)
 
 
-def run_fund_reg_monthly(fund_isin, fund_category, fund_currency='USD'):
+def run_fund_reg_monthly(fund_symbol):
 
     # obtain the fund category
-    fund_category = get_morningstar_fund_category(fund_isin)
+    fund_category = get_morningstar_fund_category(fund_symbol)
 
     if 'Emerging' in fund_category:
         name_factor_data = 'Emerging_5_Factors'
@@ -261,10 +291,10 @@ def run_fund_reg_monthly(fund_isin, fund_category, fund_currency='USD'):
     FF = get_famafrench_data(name_factor_data, name_mom_data)
     
     # calculate monthly returns
-    ret = calc_return(fund_isin, freq='monthly')
+    ret = calc_return(fund_symbol, freq='monthly')
     
     # calculating regression
-    return calc_famafrench_regression(FF, ret, fund_isin)
+    return calc_famafrench_regression(FF, ret, fund_symbol)
 
 
 def main():
