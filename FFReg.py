@@ -300,22 +300,21 @@ def run_fund_reg_monthly(fund_symbol):
 def main():
 
     # get fund price data file
-    fund_files = glob('Price Data\\*.xlsx')
+    fund_info = pd.DataFrame(glob('Price Data\\*.xlsx'), columns = ['FilePath'])
 
-    # extract fund ISIN from file path
-    fund_ISINs = []
-    for file in fund_files:
-        fund_ISINs.append(ntpath.splitext(ntpath.basename(file))[0])
+    fund_ISIN_currency = d.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-'), axis = 1, result_type='expand')
 
+    fund_info.index = fund_ISIN_currency[0]
+    fund_info.index.name = 'ISIN'
+
+    # create a dataframe with ISIN, currency and path to fund price data
+    fund_info['Currency'] = fund_ISIN_currency[1].to_list()
+    
     # read the morningstar fund data
     fund_data = pd.read_excel('..\\Instruments.xlsx', sheet_name='Equity_MS', index_col=0)
 
-    # create a dataframe with ISIN and path to fund price data
-    funds = pd.DataFrame(fund_files, index = fund_ISINs, columns = ['FilePath'])
-    funds.index.name = 'ISIN'
-
     # obtain the Morningstar fund category
-    funds = funds.merge(fund_data[['Name', 'Category', 'Currency']],
+    funds = fund_info.merge(fund_data[['Name', 'Category']],
                         left_index=True, right_index=True)
 
     # add a column with the name of the factor data file to use for each fund
@@ -365,6 +364,8 @@ def main():
         FF5_daily = get_famafrench_data(fund.FF5_daily, fund.MOM_daily)
         
         print('\nNow processing ' + fund.Name)
+
+        #TODO: read here the price data
         
         # calculate daily returns
         ret_daily = calc_return(fund.Index, freq='daily', fund_currency=fund.Currency)
