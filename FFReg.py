@@ -143,20 +143,15 @@ def get_av_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\
     return fx
 
 
-def get_excel_price_data(fund_isin):
+def get_excel_price_data(file):
     
     # read the price data from file
-    price = pd.read_excel('Price Data\\' + fund_isin + '.xlsx', sheet_name='Price_Daily', index_col=0)
+    price = pd.read_excel(file, sheet_name='Price_Daily', index_col=0)
     
     # convert the index to date period format
     price.index = pd.to_datetime(price.index, format='%Y%m%d').to_period("B")
         
     return price
-
-
-def get_price_data(fund_symbol):
-    
-    return get_av_price_data(fund_symbol), get_yahoo_fund_currency(fund_symbol)
 
 
 def convert_price_to_USD(price, fund_currency):
@@ -169,14 +164,7 @@ def convert_price_to_USD(price, fund_currency):
     return price
 
 
-def calc_return(fund_isin, freq, convert_currency=True):
-    
-    #get the fund price data and currency
-    price, fund_currency = get_price_data(fund_isin)
-
-    # convert price to USD
-    if not fund_currency=='USD' and convert_currency:
-        price = convert_price_to_USD(price, fund_currency)
+def calc_return(price, freq):
 
     # calculate daily returns
     if freq=='daily':
@@ -258,8 +246,18 @@ def run_fund_reg_daily(fund_symbol, fund_isin):
     # retrieve fama-french daily factor data
     FF = get_famafrench_data(name_factor_data, name_mom_data)
     
+    #get the fund price data
+    price = get_av_price_data(fund_symbol)
+
+    #get the fund currency
+    fund_currency = get_yahoo_fund_currency(fund_symbol)
+
+    # currency conversion of non USD price
+    if fund_currency != 'USD':
+        price = convert_price_to_USD(price, fund_currency)
+    
     # calculate daily returns
-    ret = calc_return(fund_symbol, freq='daily')
+    ret = calc_return(price, freq='daily')
     
     # calculating regression
     return calc_famafrench_regression(FF, ret, fund_symbol)
@@ -290,8 +288,18 @@ def run_fund_reg_monthly(fund_symbol):
     # retrieve fama-french monthly factor data
     FF = get_famafrench_data(name_factor_data, name_mom_data)
     
+    #get the fund price data
+    price = get_av_price_data(fund_symbol)
+
+    #get the fund currency
+    fund_currency = get_yahoo_fund_currency(fund_symbol)
+
+    # currency conversion of non USD price
+    if fund_currency != 'USD':
+        price = convert_price_to_USD(price, fund_currency)
+    
     # calculate monthly returns
-    ret = calc_return(fund_symbol, freq='monthly')
+    ret = calc_return(price, freq='monthly')
     
     # calculating regression
     return calc_famafrench_regression(FF, ret, fund_symbol)
@@ -302,8 +310,10 @@ def main():
     # get fund price data file
     fund_info = pd.DataFrame(glob('Price Data\\*.xlsx'), columns = ['FilePath'])
 
-    fund_ISIN_currency = d.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-'), axis = 1, result_type='expand')
+    # extract ISIN and currency from filename
+    fund_ISIN_currency = fund_info.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-'), axis = 1, result_type='expand')
 
+    # set the ISIN as dataframe index
     fund_info.index = fund_ISIN_currency[0]
     fund_info.index.name = 'ISIN'
 
@@ -349,11 +359,9 @@ def main():
 
     # initialize dataframe for daily regression results
     reg_daily = pd.DataFrame()
-    reg_daily.index.name = 'ISIN'
     
     # initialize dataframe for monthly regression results
     reg_monthly = pd.DataFrame()
-    reg_monthly.index.name = 'ISIN'
 
     for fund in funds.itertuples():
 
@@ -365,13 +373,18 @@ def main():
         
         print('\nNow processing ' + fund.Name)
 
-        #TODO: read here the price data
+        #read the price data
+        price = get_excel_price_data(fund.FilePath)
+
+        # currency conversion of non USD price
+        if fund.Currency != 'USD':
+            price = convert_price_to_USD(price, fund.Currency)
         
         # calculate daily returns
-        ret_daily = calc_return(fund.Index, freq='daily', fund_currency=fund.Currency)
+        ret_daily = calc_return(price, freq='daily')
 
         # calculate monthly returns
-        ret_monthly = calc_return(fund.Index, freq='monthly', fund_currency=fund.Currency)
+        ret_monthly = calc_return(price, freq='monthly')
         
         # calculating regression
         reg_daily = reg_daily.append(calc_famafrench_regression(FF5_daily, ret_daily, fund.Index))
@@ -385,10 +398,10 @@ def main():
     print(reg_monthly)
 
     # append monthly regression results when daily results are missing
-    reg_daily.append(reg_monthly[~reg_monthly.index.isin(reg_daily.index)]).to_csv('results\\reg_daily.csv', encoding='utf-8')
-
+    reg_daily.append(reg_monthly[~reg_monthly.index.isin(reg_daily.index)]).to_csv('results\\reg_daily.csv', encoding='utf-8', index_label='ISIN')
+    
     # export regression results to csv
-    reg_monthly.to_csv('results\\reg_monthly.csv', encoding='utf-8')
+    reg_monthly.to_csv('results\\reg_monthly.csv', encoding='utf-8', index_label='ISIN')
 
 
 if __name__ == '__main__':
