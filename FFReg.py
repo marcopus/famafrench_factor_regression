@@ -223,10 +223,9 @@ def calc_famafrench_regression(factor_data, fund_data, fund_symbol, quiet=False)
         reg.insert(0, 'R2_adj', model.rsquared_adj)
         if not quiet:
             print(model.summary())
+        return reg
     else:
-        print('No daily factor data!')
-        reg = pd.DataFrame()
-    return reg
+        return None
 
 
 def get_fund_factor_data(fund_isin, freq):
