@@ -152,6 +152,16 @@ def get_excel_price_data(file):
     return price
 
 
+def get_csv_price_data(file):
+    # read the price data from file
+    price = pd.read_csv(file, index_col=0)
+
+    # convert the index to date period format
+    price.index = pd.to_datetime(price.index, format='%Y%m%d').to_period("B")
+
+    return price
+
+
 def convert_price_to_USD(price, fund_currency):
     fx = get_av_forex_data(base_currency=fund_currency)
     price = price.merge(fx, left_on='Date', right_on='Date')
@@ -162,16 +172,15 @@ def convert_price_to_USD(price, fund_currency):
 
 
 def calc_return(price, freq):
-    # calculate daily returns
     if freq == 'daily':
+        # calculate daily returns
         ret = price.NAV.pct_change()[1:].to_frame(name='Return')
-        ret = ret[ret.all(1)]
-
-    # calculate monthly returns
-    if freq == 'monthly':
-        ret = price.resample("M").last().NAV.pct_change()[1:].to_frame(name='Return')
-
-    return ret
+        return ret[ret.all(1)]
+    elif freq == 'monthly':
+        # calculate monthly returns
+        return price.resample("M").last().NAV.pct_change()[1:].to_frame(name='Return')
+    else:
+        return None
 
 
 def get_famafrench_data(name_factor_data, name_mom_data, cache_dir='famafrench\\'):
@@ -289,7 +298,7 @@ def run_fund_regression(fund_symbol, fund_isin, freq):
 
 def main():
     # get fund price data file
-    fund_info = pd.DataFrame(glob('Price Data\\*.xlsx'), columns=['FilePath'])
+    fund_info = pd.DataFrame(glob('nav data\\*.csv'), columns=['FilePath'])
 
     # extract ISIN from filename
     fund_info.index = fund_info.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-')[0], axis=1)
@@ -319,7 +328,7 @@ def main():
         print('\nNow processing ' + fund.Name)
 
         # read the price data
-        price = get_excel_price_data(fund.FilePath)
+        price = get_csv_price_data(fund.FilePath)
 
         fund_currency = ntpath.splitext(ntpath.basename(fund.FilePath))[0].split('-')[1]
 
@@ -334,10 +343,12 @@ def main():
         ret_monthly = calc_return(price, freq='monthly')
 
         # calculating regression
-        reg_daily = reg_daily.append(calc_famafrench_regression(factor_data_daily, ret_daily, fund.Index, quiet=True))
+        reg_daily = reg_daily.append(
+            calc_famafrench_regression(factor_data_daily, ret_daily, fund.Index, quiet=True))
 
         # calculating regression
-        reg_monthly = reg_monthly.append(calc_famafrench_regression(factor_data_monthly, ret_monthly, fund.Index, quiet=True))
+        reg_monthly = reg_monthly.append(
+            calc_famafrench_regression(factor_data_monthly, ret_monthly, fund.Index, quiet=True))
 
     print('\nDaily Factor Regression Results')
     print(reg_daily)
