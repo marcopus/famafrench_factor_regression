@@ -73,7 +73,7 @@ def get_yahoo_fund_symbol(fund_isin, fund_exchange=None):
         # interactive exchange selection
         if n > 1:
             print('Multiple funds found:')
-            funds = [(quote['longname'], quote['exchange']) for quote in req.json()['quotes']]
+            funds = [(quote['symbol'], quote['shortname'], quote['exchange']) for quote in req.json()['quotes']]
             print(*enumerate(funds, 1), sep='\n')
             fund_number = input('Please make a selection: ')
             fund_exchange = req.json()['quotes'][int(fund_number) - 1]['exchange']
@@ -162,7 +162,7 @@ def get_csv_price_data(file):
     return price
 
 
-def convert_price_to_USD(price, fund_currency):
+def convert_price_to_usd(price, fund_currency):
     fx = get_av_forex_data(base_currency=fund_currency)
     price = price.merge(fx, left_on='Date', right_on='Date')
     price.NAV = price.NAV * price.FX
@@ -287,7 +287,7 @@ def run_fund_regression(fund_symbol, fund_isin, freq):
 
     # currency conversion of non USD price
     if fund_currency != 'USD':
-        price = convert_price_to_USD(price, fund_currency)
+        price = convert_price_to_usd(price, fund_currency)
 
     # calculate daily returns
     ret = calc_return(price, freq=freq)
@@ -302,14 +302,6 @@ def main():
 
     # extract ISIN from filename
     fund_info.index = fund_info.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-')[0], axis=1)
-    fund_info.index.name = 'ISIN'
-
-    # read the morningstar fund data
-    fund_data = pd.read_excel('..\\Instruments.xlsx', sheet_name='Equity_MS', index_col=0)
-
-    # obtain the Morningstar fund category
-    funds = fund_info.merge(fund_data[['Name', 'Category']],
-                            left_index=True, right_index=True)
 
     # initialize dataframe for daily regression results
     reg_daily = pd.DataFrame()
@@ -317,15 +309,15 @@ def main():
     # initialize dataframe for monthly regression results
     reg_monthly = pd.DataFrame()
 
-    for fund in funds.itertuples():
+    for fund in fund_info.itertuples():
+
+        print('\nNow processing ' + fund.Index)
 
         # retrieve fama-french daily factor data
         factor_data_daily = get_fund_factor_data(fund.Index, freq='daily')
 
         # retrieve fama-french monthly factor data
         factor_data_monthly = get_fund_factor_data(fund.Index, freq='monthly')
-
-        print('\nNow processing ' + fund.Name)
 
         # read the price data
         price = get_csv_price_data(fund.FilePath)
@@ -334,7 +326,7 @@ def main():
 
         # currency conversion of non USD price
         if fund_currency != 'USD':
-            price = convert_price_to_USD(price, fund_currency)
+            price = convert_price_to_usd(price, fund_currency)
 
         # calculate daily returns
         ret_daily = calc_return(price, freq='daily')
