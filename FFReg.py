@@ -6,6 +6,9 @@ import pandas_datareader.data as web
 import os
 import runcurl
 
+pd.options.display.max_columns = None
+pd.options.display.width = None
+
 
 def get_morningstar_fund_name(fund_isin):
     # curl string to obtain some morningstar fund info
@@ -159,14 +162,13 @@ def convert_price_to_USD(price, fund_currency):
 
 
 def calc_return(price, freq):
-
     # calculate daily returns
     if freq == 'daily':
         ret = price.NAV.pct_change()[1:].to_frame(name='Return')
         ret = ret[ret.all(1)]
 
     # calculate monthly returns
-    if freq=='monthly':
+    if freq == 'monthly':
         ret = price.resample("M").last().NAV.pct_change()[1:].to_frame(name='Return')
 
     return ret
@@ -185,57 +187,88 @@ def get_famafrench_data(name_factor_data, name_mom_data, cache_dir='famafrench\\
             except:
                 mom_data = web.DataReader(name_mom_data, 'famafrench')[0] / 100
                 mom_data.to_pickle(cache_dir + name_mom_data)
-            if not 'WML' in mom_data.columns:
+            if 'WML' not in mom_data.columns:
                 mom_data = mom_data.iloc[:, 0].to_frame(name='WML')
             factor_data = factor_data.merge(mom_data, left_index=True, right_index=True)
-        if not 'period' in str(factor_data.index.dtype):
+        if 'period' not in str(factor_data.index.dtype):
             factor_data.index = factor_data.index.to_period("B")
     else:
         factor_data = pd.DataFrame()
     return factor_data
 
 
-def calc_famafrench_regression(factor_data, fund_data, fund_symbol):
+def calc_famafrench_regression(factor_data, fund_data, fund_symbol, quiet=False):
     if not factor_data.empty:
-        X = fund_data.merge(factor_data, left_index=True, right_index=True)
-        X['Return-RF'] = X['Return'] - X['RF']
-        y = X['Return-RF']
-        X = X.drop(['RF', 'Return', 'Return-RF'], axis=1)
-        X = sm.add_constant(X)
+        x = fund_data.merge(factor_data, left_index=True, right_index=True)
+        x['Return-RF'] = x['Return'] - x['RF']
+        y = x['Return-RF']
+        x = x.drop(['RF', 'Return', 'Return-RF'], axis=1)
+        x = sm.add_constant(x)
 
-        model = sm.OLS(y, X).fit(cov_type='HAC', cov_kwds={'maxlags': 1})
-        model.predict(X)
-        print(model.summary())
+        model = sm.OLS(y, x).fit(cov_type='HAC', cov_kwds={'maxlags': 1})
+        model.predict(x)
         res = model.params.copy()
         res[abs(model.tvalues) < 1.96] = None
         res.name = fund_symbol
         reg = res.to_frame().transpose()
+        reg.insert(0, 'R2_adj', model.rsquared_adj)
+        if not quiet:
+            print(model.summary())
     else:
         print('No daily factor data!')
         reg = pd.DataFrame()
     return reg
 
 
-def run_fund_reg_daily(fund_symbol, fund_isin):
+def get_fund_factor_data(fund_isin, freq):
     # obtain the fund category
     fund_category = get_morningstar_fund_category(fund_isin)
 
-    if 'US' in fund_category:
-        name_factor_data = 'F-F_Research_Data_5_Factors_2x3_daily'
-    if 'Global' in fund_category and not 'Emerging' in fund_category:
-        name_factor_data = 'Developed_5_Factors_Daily'
-    if 'Europe' in fund_category or 'Eurozone' in fund_category:
-        name_factor_data = 'Europe_5_Factors_Daily'
-    if 'US' in fund_category:
-        name_mom_data = 'F-F_Momentum_Factor_daily'
-    if 'Global' in fund_category and not 'Emerging' in fund_category:
-        name_mom_data = 'Developed_Mom_Factor_Daily'
-    if 'Europe' in fund_category or 'Eurozone' in fund_category:
-        name_mom_data = 'Europe_Mom_Factor_Daily'
-    print('Factor data: ' + name_factor_data)
+    if freq == 'daily':
+        # assign the name of daily factor data
+        if 'US' in fund_category:
+            name_factor_data = 'F-F_Research_Data_5_Factors_2x3_daily'
+            name_mom_data = 'F-F_Momentum_Factor_daily'
+        elif 'Global' in fund_category and 'Emerging' not in fund_category:
+            name_factor_data = 'Developed_5_Factors_Daily'
+            name_mom_data = 'Developed_Mom_Factor_Daily'
+        elif 'Europe' in fund_category or 'Eurozone' in fund_category:
+            name_factor_data = 'Europe_5_Factors_Daily'
+            name_mom_data = 'Europe_Mom_Factor_Daily'
+        else:
+            name_factor_data = None
+            name_mom_data = None
+    elif freq == 'monthly':
+        if 'Emerging' in fund_category:
+            name_factor_data = 'Emerging_5_Factors'
+            name_mom_data = 'Emerging_MOM_Factor'
+        elif 'US' in fund_category:
+            name_factor_data = 'F-F_Research_Data_5_Factors_2x3'
+            name_mom_data = 'F-F_Momentum_Factor'
+        elif 'Global' in fund_category and 'Emerging' not in fund_category:
+            name_factor_data = 'Developed_5_Factors'
+            name_mom_data = 'Developed_Mom_Factor'
+        elif 'Europe' in fund_category or 'Eurozone' in fund_category:
+            name_factor_data = 'Europe_5_Factors'
+            name_mom_data = 'Europe_Mom_Factor'
+        else:
+            name_factor_data = None
+            name_mom_data = None
+    else:
+        raise Exception("`freq´ must be one of 'daily' or 'monthly'")
+
+    if name_factor_data:
+        print('Factor data: ' + name_factor_data)
+    else:
+        print('Factor data not found!')
 
     # retrieve fama-french daily factor data
-    FF = get_famafrench_data(name_factor_data, name_mom_data)
+    return get_famafrench_data(name_factor_data, name_mom_data)
+
+
+def run_fund_regression(fund_symbol, fund_isin, freq):
+    # retrieve fama-french daily factor data
+    factor_data = get_fund_factor_data(fund_isin, freq=freq)
 
     # get the fund price data
     price = get_av_price_data(fund_symbol)
@@ -248,67 +281,19 @@ def run_fund_reg_daily(fund_symbol, fund_isin):
         price = convert_price_to_USD(price, fund_currency)
 
     # calculate daily returns
-    ret = calc_return(price, freq='daily')
+    ret = calc_return(price, freq=freq)
 
     # calculating regression
-    return calc_famafrench_regression(FF, ret, fund_symbol)
-
-
-def run_fund_reg_monthly(fund_symbol):
-    # obtain the fund category
-    fund_category = get_morningstar_fund_category(fund_symbol)
-
-    if 'Emerging' in fund_category:
-        name_factor_data = 'Emerging_5_Factors'
-    if 'US' in fund_category:
-        name_factor_data = 'F-F_Research_Data_5_Factors_2x3'
-    if 'Global' in fund_category and not 'Emerging' in fund_category:
-        name_factor_data = 'Developed_5_Factors'
-    if 'Europe' in fund_category or 'Eurozone' in fund_category:
-        name_factor_data = 'Europe_5_Factors'
-    if 'Emerging' in fund_category:
-        name_factor_data = 'Emerging_MOM_Factor'
-    if 'US' in fund_category:
-        name_mom_data = 'F-F_Momentum_Factor'
-    if 'Global' in fund_category and not 'Emerging' in fund_category:
-        name_mom_data = 'Developed_Mom_Factor'
-    if 'Europe' in fund_category or 'Eurozone' in fund_category:
-        name_mom_data = 'Europe_Mom_Factor'
-
-    # retrieve fama-french monthly factor data
-    FF = get_famafrench_data(name_factor_data, name_mom_data)
-
-    # get the fund price data
-    price = get_av_price_data(fund_symbol)
-
-    # get the fund currency
-    fund_currency = get_yahoo_fund_currency(fund_symbol)
-
-    # currency conversion of non USD price
-    if fund_currency != 'USD':
-        price = convert_price_to_USD(price, fund_currency)
-
-    # calculate monthly returns
-    ret = calc_return(price, freq='monthly')
-
-    # calculating regression
-    return calc_famafrench_regression(FF, ret, fund_symbol)
+    return calc_famafrench_regression(factor_data, ret, fund_symbol)
 
 
 def main():
     # get fund price data file
     fund_info = pd.DataFrame(glob('Price Data\\*.xlsx'), columns=['FilePath'])
 
-    # extract ISIN and currency from filename
-    fund_ISIN_currency = fund_info.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-'),
-                                         axis=1, result_type='expand')
-
-    # set the ISIN as dataframe index
-    fund_info.index = fund_ISIN_currency[0]
+    # extract ISIN from filename
+    fund_info.index = fund_info.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-')[0], axis=1)
     fund_info.index.name = 'ISIN'
-
-    # create a dataframe with ISIN, currency and path to fund price data
-    fund_info['Currency'] = fund_ISIN_currency[1].to_list()
 
     # read the morningstar fund data
     fund_data = pd.read_excel('..\\Instruments.xlsx', sheet_name='Equity_MS', index_col=0)
@@ -316,44 +301,6 @@ def main():
     # obtain the Morningstar fund category
     funds = fund_info.merge(fund_data[['Name', 'Category']],
                             left_index=True, right_index=True)
-
-    # add a column with the name of the factor data file to use for each fund
-    funds['FF5_monthly'] = funds.apply(lambda row:
-                                       'Emerging_5_Factors' if 'Emerging' in row.Category else
-                                       ('F-F_Research_Data_5_Factors_2x3' if 'US' in row.Category else
-                                        (
-                                            'Developed_5_Factors' if 'Global' in row.Category and not 'Emerging' in row.Category else
-                                            (
-                                                'Europe_5_Factors' if 'Europe' in row.Category or 'Eurozone' in row.Category else
-                                                ''))), axis=1)
-
-    # add a column with the name of the factor data file to use for each fund
-    funds['FF5_daily'] = funds.apply(lambda row:
-                                     'F-F_Research_Data_5_Factors_2x3_daily' if 'US' in row.Category else
-                                     (
-                                         'Developed_5_Factors_Daily' if 'Global' in row.Category and not 'Emerging' in row.Category else
-                                         (
-                                             'Europe_5_Factors_Daily' if 'Europe' in row.Category or 'Eurozone' in row.Category else
-                                             '')), axis=1)
-
-    # add a column with the name of the factor data file to use for each fund
-    funds['MOM_monthly'] = funds.apply(lambda row:
-                                       'Emerging_MOM_Factor' if 'Emerging' in row.Category else
-                                       ('F-F_Momentum_Factor' if 'US' in row.Category else
-                                        (
-                                            'Developed_Mom_Factor' if 'Global' in row.Category and not 'Emerging' in row.Category else
-                                            (
-                                                'Europe_Mom_Factor' if 'Europe' in row.Category or 'Eurozone' in row.Category else
-                                                ''))), axis=1)
-
-    # add a column with the name of the factor data file to use for each fund
-    funds['MOM_daily'] = funds.apply(lambda row:
-                                     'F-F_Momentum_Factor_daily' if 'US' in row.Category else
-                                     (
-                                         'Developed_Mom_Factor_Daily' if 'Global' in row.Category and not 'Emerging' in row.Category else
-                                         (
-                                             'Europe_Mom_Factor_Daily' if 'Europe' in row.Category or 'Eurozone' in row.Category else
-                                             '')), axis=1)
 
     # initialize dataframe for daily regression results
     reg_daily = pd.DataFrame()
@@ -363,20 +310,22 @@ def main():
 
     for fund in funds.itertuples():
 
-        # retrieve fama-french monthly factor data
-        FF5_monthly = get_famafrench_data(fund.FF5_monthly, fund.MOM_monthly)
-
         # retrieve fama-french daily factor data
-        FF5_daily = get_famafrench_data(fund.FF5_daily, fund.MOM_daily)
+        factor_data_daily = get_fund_factor_data(fund.Index, freq='daily')
+
+        # retrieve fama-french monthly factor data
+        factor_data_monthly = get_fund_factor_data(fund.Index, freq='monthly')
 
         print('\nNow processing ' + fund.Name)
 
         # read the price data
         price = get_excel_price_data(fund.FilePath)
 
+        fund_currency = ntpath.splitext(ntpath.basename(fund.FilePath))[0].split('-')[1]
+
         # currency conversion of non USD price
-        if fund.Currency != 'USD':
-            price = convert_price_to_USD(price, fund.Currency)
+        if fund_currency != 'USD':
+            price = convert_price_to_USD(price, fund_currency)
 
         # calculate daily returns
         ret_daily = calc_return(price, freq='daily')
@@ -385,10 +334,10 @@ def main():
         ret_monthly = calc_return(price, freq='monthly')
 
         # calculating regression
-        reg_daily = reg_daily.append(calc_famafrench_regression(FF5_daily, ret_daily, fund.Index))
+        reg_daily = reg_daily.append(calc_famafrench_regression(factor_data_daily, ret_daily, fund.Index, quiet=True))
 
         # calculating regression
-        reg_monthly = reg_monthly.append(calc_famafrench_regression(FF5_monthly, ret_monthly, fund.Index))
+        reg_monthly = reg_monthly.append(calc_famafrench_regression(factor_data_monthly, ret_monthly, fund.Index, quiet=True))
 
     print('\nDaily Factor Regression Results')
     print(reg_daily)
@@ -404,5 +353,4 @@ def main():
 
 
 if __name__ == '__main__':
-    # main()
-    pass
+    main()
