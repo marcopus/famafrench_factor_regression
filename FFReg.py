@@ -162,8 +162,100 @@ def get_csv_price_data(file):
     return price
 
 
+def get_csv_boe_usd_eur_rate(file='forex\\Bank of England Database.csv'):
+    # read the EUR/USD exchange data from csv
+    fx = pd.read_csv(file, index_col=0)
+
+    # convert the index to daily period format
+    fx.index = pd.to_datetime(fx.index).to_period('B')
+
+    return fx
+
+
+def calc_usd_eur_return(freq='daily'):
+    # get the EUR/USD exchange data and 1/x to get USD/EUR rate
+    fx = get_csv_boe_usd_eur_rate() ** (-1)
+
+    # calculate the rate of return
+    if freq == 'monthly':
+        rfx = calc_return(fx.sort_index().resample("M").last(), freq='daily')
+    elif freq == 'daily':
+        rfx = calc_return(fx.sort_index(), freq='daily')
+    else:
+        raise Exception("freq must be either 'daily' or 'monthly'!")
+
+    rfx.rename(columns={'Return': 'rFX'}, inplace=True)
+
+    return rfx
+
+
+def get_csv_eonia_rate(freq='daily', file='eonia\\data.csv'):
+    # read the eonia rate data from csv file
+    rf = pd.read_csv(file, index_col=0, skiprows=4, parse_dates=True, header=0, names=['Date', 'RF_EUR']) / 100
+
+    # convert the index to daily period format
+    rf.index = pd.to_datetime(rf.index).to_period('B')
+
+    if freq == 'monthly':
+        return rf.resample("M").last()
+    elif freq == 'daily':
+        return rf
+    else:
+        raise Exception("freq must be either 'daily' or 'monthly'!")
+
+
+def convert_factor_data_to_eur(factor_data):
+    if factor_data.empty:
+        return pd.DataFrame()
+
+    # detect whether factor data has daily or monthly resolution
+    if factor_data.index.dtype == 'period[B]':
+        freq = 'daily'
+    elif factor_data.index.dtype == 'period[M]':
+        freq = 'monthly'
+    else:
+        raise Exception('Unable to detect factor data resolution!')
+
+    # join the USD/EUR rate data
+    factor_data = factor_data.join(calc_usd_eur_return(freq=freq), how='inner')
+
+    # join the European risk-free rate data
+    factor_data = factor_data.join(get_csv_eonia_rate(freq=freq), how='inner')
+
+    # calculate excess market rete of return in EUR
+    factor_data_eur = pd.DataFrame()
+    factor_data_eur['Mkt-RF'] = (1 + factor_data['rFX']) ** (-1) * \
+                                (1 + factor_data['Mkt-RF'] + factor_data['RF']) - 1 - factor_data['RF_EUR']
+
+    # add column with EUR risk-free rate of return
+    factor_data_eur['RF'] = factor_data['RF_EUR']
+
+    # convert long-short USD factor data to EUR
+    if 'SMB' in factor_data.columns:
+        factor_data_eur['SMB'] = (1 + factor_data['rFX']) ** (-1) * factor_data['SMB']
+    if 'HML' in factor_data.columns:
+        factor_data_eur['HML'] = (1 + factor_data['rFX']) ** (-1) * factor_data['HML']
+    if 'RMW' in factor_data.columns:
+        factor_data_eur['RMW'] = (1 + factor_data['rFX']) ** (-1) * factor_data['RMW']
+    if 'CMA' in factor_data.columns:
+        factor_data_eur['CMA'] = (1 + factor_data['rFX']) ** (-1) * factor_data['CMA']
+    if 'WML' in factor_data.columns:
+        factor_data_eur['WML'] = (1 + factor_data['rFX']) ** (-1) * factor_data['WML']
+
+    return factor_data_eur
+
+
 def convert_price_to_usd(price, fund_currency):
     fx = get_av_forex_data(base_currency=fund_currency)
+    price = price.merge(fx, left_on='Date', right_on='Date')
+    price.NAV = price.NAV * price.FX
+    price.drop('FX', axis=1, inplace=True)
+
+    return price
+
+
+def convert_price_to_eur(price, fund_currency):
+    fx = get_av_forex_data(base_currency=fund_currency, to_currency='EUR')
     price = price.merge(fx, left_on='Date', right_on='Date')
     price.NAV = price.NAV * price.FX
     price.drop('FX', axis=1, inplace=True)
@@ -174,13 +266,13 @@ def convert_price_to_usd(price, fund_currency):
 def calc_return(price, freq):
     if freq == 'daily':
         # calculate daily returns
-        ret = price.NAV.pct_change()[1:].to_frame(name='Return')
+        ret = price.iloc[:, 0].pct_change()[1:].to_frame(name='Return')
         return ret[ret.all(1)]
     elif freq == 'monthly':
         # calculate monthly returns
-        return price.resample("M").last().NAV.pct_change()[1:].to_frame(name='Return')
+        return price.iloc[:, 0].resample("M").last().pct_change()[1:].to_frame(name='Return')
     else:
-        return None
+        raise Exception("freq must be either 'daily' or 'monthly'!")
 
 
 def get_famafrench_data(name_factor_data, name_mom_data, cache_dir='famafrench\\'):
@@ -225,7 +317,7 @@ def calc_famafrench_regression(factor_data, fund_data, fund_symbol, quiet=False)
             print(model.summary())
         return reg
     else:
-        return None
+        return pd.DataFrame()
 
 
 def get_fund_factor_data(fund_isin, freq):
@@ -300,7 +392,8 @@ def main():
     fund_info = pd.DataFrame(glob('nav data\\*.csv'), columns=['FilePath'])
 
     # extract ISIN from filename
-    fund_info.index = fund_info.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-')[0], axis=1)
+    fund_info.index = fund_info.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-')[0],
+                                      axis=1)
 
     # initialize dataframe for daily regression results
     reg_daily = pd.DataFrame()
@@ -354,5 +447,66 @@ def main():
     reg_monthly.to_csv('results\\reg_monthly.csv', encoding='utf-8', index_label='ISIN')
 
 
+def run_regression_eur():
+    # get fund price data file
+    fund_info = pd.DataFrame(glob('nav data\\*.csv'), columns=['FilePath'])
+
+    # initialize dataframe for daily regression results
+    reg_daily = pd.DataFrame()
+
+    # initialize dataframe for monthly regression results
+    reg_monthly = pd.DataFrame()
+
+    for fund in fund_info.itertuples():
+
+        # extract ISIN from filename
+        isin = ntpath.splitext(ntpath.basename(fund.FilePath))[0].split('-')[0]
+
+        print('\nNow processing ' + isin)
+
+        # retrieve fama-french daily factor data
+        factor_data_daily = convert_factor_data_to_eur(get_fund_factor_data(isin, freq='daily'))
+
+        # retrieve fama-french monthly factor data
+        factor_data_monthly = convert_factor_data_to_eur(get_fund_factor_data(isin, freq='monthly'))
+
+        # read the price data
+        price = get_csv_price_data(fund.FilePath)
+
+        # extract the fund currency from the filename
+        fund_currency = ntpath.splitext(ntpath.basename(fund.FilePath))[0].split('-')[1]
+
+        # currency conversion of non EUR price
+        if fund_currency != 'EUR':
+            price = convert_price_to_eur(price, fund_currency)
+
+        if not factor_data_daily.empty:
+            # calculate daily returns
+            ret_daily = calc_return(price, freq='daily')
+
+            # calculating regression
+            reg_daily = reg_daily.append(
+                calc_famafrench_regression(factor_data_daily, ret_daily, isin, quiet=True))
+
+        # calculate monthly returns
+        ret_monthly = calc_return(price, freq='monthly')
+
+        # calculating regression
+        reg_monthly = reg_monthly.append(
+            calc_famafrench_regression(factor_data_monthly, ret_monthly, isin, quiet=True))
+
+    print('\nDaily Factor Regression Results')
+    print(reg_daily)
+
+    print('\nMonthly Factor Regression Results')
+    print(reg_monthly)
+
+    # append monthly regression results when daily results are missing
+    reg_daily.append(reg_monthly[~reg_monthly.index.isin(reg_daily.index)]).to_csv('results\\reg_daily_eur.csv',
+                                                                                   encoding='utf-8', index_label='ISIN')
+
+    # export regression results to csv
+    reg_monthly.to_csv('results\\reg_monthly_eur.csv', encoding='utf-8', index_label='ISIN')
+
 if __name__ == '__main__':
-    main()
+    run_regression_eur()
