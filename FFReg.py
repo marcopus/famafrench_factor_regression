@@ -358,9 +358,9 @@ def get_fund_factor_data(fund_isin, freq):
         raise Exception("`freq´ must be one of 'daily' or 'monthly'")
 
     if name_factor_data:
-        print('Factor data: ' + name_factor_data)
+        print(freq + ' factor data: ' + name_factor_data)
     else:
-        print('Factor data not found!')
+        print(freq + ' factor data not found!')
 
     # retrieve fama-french daily factor data
     return get_famafrench_data(name_factor_data, name_mom_data)
@@ -462,7 +462,7 @@ def run_regression_eur():
         # extract ISIN from filename
         isin = ntpath.splitext(ntpath.basename(fund.FilePath))[0].split('-')[0]
 
-        print('\nNow processing ' + isin)
+        print('\nNow processing ' + get_morningstar_fund_name(isin))
 
         # retrieve fama-french daily factor data
         factor_data_daily = convert_factor_data_to_eur(get_fund_factor_data(isin, freq='daily'))
