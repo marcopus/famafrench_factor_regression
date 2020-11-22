@@ -5,6 +5,7 @@ import ntpath
 import pandas_datareader.data as web
 import os
 import runcurl
+from urllib.error import HTTPError
 
 pd.options.display.max_columns = None
 pd.options.display.width = None
@@ -18,11 +19,11 @@ def get_morningstar_fund_name(fund_isin):
     # extract the morningstar fund info
     if req.status_code == 200:
         fund_name = req.json()['results'][0]['name']
-        print('Fund name Morningstar: ' + fund_name)
+        print(fund_isin + ': ' + fund_name)
         return fund_name
     else:
-        print('Cannot find ' + fund_isin + ' on Morningstar!')
-        return None
+        print(fund_isin + ': cannot retrieve fund name from Morningstar!')
+        return ''
 
 
 def get_morningstar_fund_category(fund_isin):
@@ -32,10 +33,14 @@ def get_morningstar_fund_category(fund_isin):
 
     # extract the morningstar fund id
     if req.status_code == 200:
-        sec_id = req.json()['results'][0]['secId']
+        if not req.json()['results']:
+            print(fund_isin + ': cannot retrieve fund data from Morningstar!')
+            return ''
+        else:
+            sec_id = req.json()['results'][0]['secId']
     else:
-        print('Cannot find ' + fund_isin + ' on Morningstar!')
-        return None
+        print(fund_isin + ': cannot retrieve fund data from Morningstar!')
+        return ''
 
     # curl string to obtain the morningstar fund info
     curlstr = "curl 'https://api-global.morningstar.com/sal-service/v1/etf/process/asset/v2/" + sec_id + "/data?locale=en&clientId=MDC&benchmarkId=category&version=3.31.0' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:81.0) Gecko/20100101 Firefox/81.0' -H 'Accept: application/json, text/plain, */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://www.morningstar.com/etfs/xetr/exsa/portfolio' -H 'X-API-REALTIME-E: eyJlbmMiOiJBMTI4R0NNIiwiYWxnIjoiUlNBLU9BRVAifQ.XmuAS3x5r-0MJuwLDdD4jNC6zjsY7HAFNo2VdvGg6jGcj4hZ4NaJgH20ez313H8An9UJrsUj8ERH0R8UyjQu2UGMUnJ5B1ooXFPla0LQEbN_Em3-IG84YPFcWVmEgcs1Fl2jjlKHVqZp04D21UvtgQ4xyPwQ-QDdTxHqyvSCpcE.ACRnQsNuTh1K_C9R.xpLNZ8Cc9faKoOYhss1CD0A4hG4m0M7-LZQ0fISw7NUHwzQs2AEo9ZXfwOvAj1fCbcE96mbKQo8gr7Oq1a2-piYXM1X5yNMcCxEaYyGinpnf6PGqbdr6zbYZdqyJk0KrxWVhKSQchLJaLGJOts4GlpqujSqJObJQcWWbkJQYKG9K7oKsdtMAKsHIVo5-0BCUbjKVnHJNsYwTsI7xn2Om8zGm4A.nBOuiEDssVFHC_N68tDjVA' -H 'X-SAL-ContentType: e7FDDltrTy+tA2HnLovvGL0LFMwT+KkEptGju5wXVTU=' -H 'X-API-RequestId: ae855627-097b-9bb0-a2dd-92925520bce1' -H 'ApiKey: lstzFDEOhfFNMLikKa0am9mgEKLBl49T' -H 'Origin: https://www.morningstar.com' -H 'Connection: keep-alive' -H 'TE: Trailers'"
@@ -46,11 +51,11 @@ def get_morningstar_fund_category(fund_isin):
         print('Fund category Morningstar: ' + fund_category)
         return fund_category
     else:
-        print('Cannot get info on ' + fund_isin + ' on Morningstar!')
-        return None
+        print(fund_isin + ': cannot retrieve fund category from Morningstar!')
+        return ''
 
 
-def get_yahoo_fund_symbol(fund_isin, fund_exchange=None):
+def get_yahoo_fund_symbol(fund_isin, fund_exchange=''):
     """
     >EXPERIMENTAL< It does not work very well...
     Fund_exchange is typically one of 'AMS', 'LSE', 'GER', 'MIL', 'FRA'. If
@@ -66,7 +71,7 @@ def get_yahoo_fund_symbol(fund_isin, fund_exchange=None):
         n = len(req.json()['quotes'])
     else:
         print('Fund not found on Yahoo!')
-        return None
+        return ''
 
     # search the exchange when not provided
     if not fund_exchange:
@@ -89,9 +94,14 @@ def get_yahoo_fund_symbol(fund_isin, fund_exchange=None):
 
 
 def get_yahoo_fund_currency(fund_symbol):
-    json = pd.read_json('https://query1.finance.yahoo.com/v8/finance/chart/' + fund_symbol)
+    try:
+        json = pd.read_json('https://query1.finance.yahoo.com/v8/finance/chart/' + fund_symbol)
+    except HTTPError:
+        print(fund_symbol + ': cannot retrieve fund currency from Yahoo!')
+        return ''
+
     fund_currency = json['chart']['result'][0]['meta']['currency'].upper()
-    print('Fund currency Yahoo: ' + fund_currency)
+    print(fund_symbol + ': fund currency from Yahoo is' + fund_currency)
 
     return fund_currency
 
@@ -104,9 +114,14 @@ def get_yahoo_price_data(fund_symbol, cache_dir='price\\'):
         pass
 
     # read the price data
-    price = pd.read_csv('https://query1.finance.yahoo.com/v7/finance/download/' + fund_symbol +
-                        '?period1=0&period2=10000000000&interval=1d&events=history&includeAdjustedClose=true',
-                        index_col=['Date'])['Adj Close'].rename('Price')
+    try:
+        price = pd.read_csv('https://query1.finance.yahoo.com/v7/finance/download/' + fund_symbol +
+                            '?period1=0&period2=10000000000&interval=1d&events=history&includeAdjustedClose=true',
+                            index_col=['Date'])['Adj Close'].rename('Price')
+    except HTTPError:
+        print(fund_symbol + ': cannot retrieve fund price data from Yahoo!')
+        return pd.Series()
+
     price.index = pd.to_datetime(price.index).to_period("B")
 
     # save the price data to file
@@ -129,7 +144,12 @@ def get_av_price_data(fund_symbol, cache_dir='price\\'):
         raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable!")
 
     # read the price data
-    price = web.DataReader(fund_symbol.upper(), 'av-daily-adjusted')['adjusted close'].rename('Price')
+    try:
+        price = web.DataReader(fund_symbol.upper(), 'av-daily-adjusted')['adjusted close'].rename('Price')
+    except ValueError:
+        print(fund_symbol + ": could not retrieve price data from AlphaVantage. Check valid ticker.")
+        return pd.Series()
+
     price.index = pd.to_datetime(price.index).to_period("B")
     price.index.name = 'Date'
 
@@ -153,7 +173,12 @@ def get_av_forex_data(base_currency, to_currency, cache_dir='forex\\'):
         raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable!")
 
     # read the currency data
-    fx = web.DataReader(base_currency + '/' + to_currency, 'av-forex-daily')['close'].rename('FX')
+    try:
+        fx = web.DataReader(base_currency + '/' + to_currency, 'av-forex-daily')['close'].rename('FX')
+    except ValueError:
+        print("Could not retrieve forex data from AlphaVantage. Check valid currency.")
+        return pd.Series()
+
     fx.index = pd.to_datetime(fx.index).to_period("B")
     fx.index.name = 'Date'
 
@@ -389,6 +414,10 @@ def run_fund_regression(fund_symbol, fund_isin, freq, currency):
     # retrieve fama-french daily factor data, convert currency if needed
     factor_data = (get_fund_factor_data(fund_isin, freq=freq) if currency.upper() == 'USD' else
                    convert_factor_data_to_eur(get_fund_factor_data(fund_isin, freq=freq)))
+
+    if factor_data.empty:
+        print(fund_isin + ': cannot retrieve factor data for this fund. Aborted.')
+        return pd.DataFrame()
 
     # get the fund price data
     price = get_av_price_data(fund_symbol)
