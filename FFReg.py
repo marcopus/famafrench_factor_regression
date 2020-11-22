@@ -101,15 +101,21 @@ def get_yahoo_fund_currency(fund_symbol):
         return ''
 
     fund_currency = json['chart']['result'][0]['meta']['currency'].upper()
-    print(fund_symbol + ': fund currency from Yahoo is' + fund_currency)
+    print(fund_symbol + ': fund currency from Yahoo is ' + fund_currency)
 
     return fund_currency
 
 
-def get_yahoo_price_data(fund_symbol, cache_dir='price\\'):
+def get_yahoo_price_data(fund_symbol, cache_dir='price\\', suffixes=None):
+    if suffixes is None:
+        suffixes = ['.F', '.DE']
+
     # try to load the price data from file, if not skip to next
     try:
-        return pd.read_pickle(cache_dir + fund_symbol.upper())
+        price = pd.read_pickle(cache_dir + fund_symbol.upper())
+        # print the date interval of price data
+        print(fund_symbol.upper() + ' price data interval is ' + str(price.index[0]) + ' to ' + str(price.index[-1]))
+        return price, fund_symbol
     except FileNotFoundError:
         pass
 
@@ -118,18 +124,22 @@ def get_yahoo_price_data(fund_symbol, cache_dir='price\\'):
         price = pd.read_csv('https://query1.finance.yahoo.com/v7/finance/download/' + fund_symbol +
                             '?period1=0&period2=10000000000&interval=1d&events=history&includeAdjustedClose=true',
                             index_col=['Date'])['Adj Close'].rename('Price')
+        price.index = pd.to_datetime(price.index).to_period("B")
+        # print the date interval of price data
+        print(fund_symbol.upper() + ' price data interval is ' + str(price.index[0]) + ' to ' + str(price.index[-1]))
+        # save the price data to file
+        price.to_pickle(cache_dir + fund_symbol.upper())
     except HTTPError:
         print(fund_symbol + ': cannot retrieve fund price data from Yahoo!')
-        return pd.Series()
+        if not suffixes:
+            return pd.Series(), fund_symbol
+        else:
+            # get the next symbol from the available list
+            fund_symbol = fund_symbol.split('.')[0] + suffixes.pop()
+            # try reading the same symbol from another exchange
+            price, _ = get_yahoo_price_data(fund_symbol, suffixes=suffixes)
 
-    price.index = pd.to_datetime(price.index).to_period("B")
-
-    # save the price data to file
-    price.to_pickle(cache_dir + fund_symbol.upper())
-
-    print(fund_symbol.upper() + ' price data interval: ' + str(price.index[0]) + ' to ' + str(price.index[-1]))
-
-    return price
+    return price, fund_symbol
 
 
 def get_av_price_data(fund_symbol, cache_dir='price\\'):
@@ -354,6 +364,7 @@ def calc_famafrench_regression(factor_data, fund_data, fund_symbol, quiet=False)
         res.name = fund_symbol
         reg = res.to_frame().transpose()
         reg.insert(0, 'R2_adj', model.rsquared_adj)
+        reg.insert(0, 'N', int(model.nobs))
         if not quiet:
             print(model.summary())
         return reg
@@ -407,7 +418,9 @@ def get_fund_factor_data(fund_isin, freq):
     return get_famafrench_data(name_factor_data, name_mom_data)
 
 
-def run_fund_regression(fund_symbol, fund_isin, freq, currency):
+def run_fund_regression(fund_symbol, fund_isin, freq, currency, quiet=False):
+    print('\nRunning ' + freq + ' factor regression in ' + currency + ' for ' + fund_symbol + ' (' + fund_isin + ')')
+
     # check requested currency for regression
     if currency not in ['EUR', 'USD']:
         raise Exception("currency for regression must be either 'EUR' or 'USD'!")
@@ -420,8 +433,11 @@ def run_fund_regression(fund_symbol, fund_isin, freq, currency):
         print(fund_isin + ': cannot retrieve factor data for this fund. Aborted.')
         return pd.DataFrame()
 
-    # get the fund price data
-    price = get_av_price_data(fund_symbol)
+    # get the fund price data and possibly update the symbol
+    price, fund_symbol = get_yahoo_price_data(fund_symbol)
+    # price = get_av_price_data(fund_symbol)
+    if price.empty:
+        return pd.DataFrame()
 
     # get the fund currency
     fund_currency = get_yahoo_fund_currency(fund_symbol)
@@ -439,7 +455,24 @@ def run_fund_regression(fund_symbol, fund_isin, freq, currency):
     ret = calc_return(price, freq=freq)
 
     # calculating regression
-    return calc_famafrench_regression(factor_data, ret, fund_symbol)
+    return calc_famafrench_regression(factor_data, ret, fund_symbol, quiet=quiet)
+
+
+def run_regressions(currency='EUR', fund_info=pd.read_excel('..//Instruments.xlsx', sheet_name='Equity', index_col=0)):
+    # initialize dataframe for regression results
+    reg = pd.DataFrame()
+
+    for fund in fund_info.itertuples():
+        if isinstance(fund.Symbol, str):
+            reg = reg.append(run_fund_regression(fund.Symbol, fund.Index, freq='daily', currency='EUR', quiet=True))
+
+    print('\nFactor Regression Results')
+    print(reg)
+
+    suffix = (currency.lower() if currency.upper() == 'EUR' else currency.lower())
+    reg.to_csv('results\\reg_all_daily_' + suffix + '.csv', encoding='utf-8', index_label='ISIN')
+
+    return reg
 
 
 def run_regressions_local_data(currency='EUR', prices_dir='nav data\\'):
