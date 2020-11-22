@@ -210,7 +210,8 @@ def get_csv_price_data(file):
 
 def get_csv_boe_usd_eur_rate(file='forex\\Bank of England Database.csv'):
     # read the EUR/USD exchange data from csv
-    fx = pd.read_csv(file, index_col=0)
+    fx = pd.read_csv(file, index_col=0).iloc[:, 0]
+    fx.name = 'FX'
 
     # convert the index to daily period format
     fx.index = pd.to_datetime(fx.index).to_period('B')
@@ -301,11 +302,11 @@ def convert_price_currency(price, fund_currency, to_currency):
 def calc_return(price, freq):
     if freq == 'daily':
         # calculate daily returns
-        ret = price.iloc[:, 0].pct_change()[1:].to_frame(name='Return')
+        ret = price.pct_change()[1:].to_frame(name='Return')
         return ret[ret.all(1)]
     elif freq == 'monthly':
         # calculate monthly returns
-        return price.iloc[:, 0].resample("M").last().pct_change()[1:].to_frame(name='Return')
+        return price.resample("M").last().pct_change()[1:].to_frame(name='Return')
     else:
         raise Exception("freq must be either 'daily' or 'monthly'!")
 
@@ -441,9 +442,9 @@ def run_fund_regression(fund_symbol, fund_isin, freq, currency):
     return calc_famafrench_regression(factor_data, ret, fund_symbol)
 
 
-def run_regression(currency='EUR'):
+def run_regressions_local_data(currency='EUR', prices_dir='nav data\\'):
     # get fund price data file
-    fund_info = pd.DataFrame(glob('nav data\\*.csv'), columns=['FilePath'])
+    fund_info = pd.DataFrame(glob(prices_dir + '*.csv'), columns=['FilePath'])
 
     # initialize dataframe for daily regression results
     reg_daily = pd.DataFrame()
@@ -510,5 +511,4 @@ def run_regression(currency='EUR'):
 
 
 if __name__ == '__main__':
-    run_regression(currency='EUR')
-    # run_regression(currency='USD')
+    run_regressions_local_data(currency='EUR')
