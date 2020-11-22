@@ -51,11 +51,11 @@ def get_morningstar_fund_category(fund_isin):
 
 
 def get_yahoo_fund_symbol(fund_isin, fund_exchange=None):
-    '''
+    """
     >EXPERIMENTAL< It does not work very well...
     Fund_exchange is typically one of 'AMS', 'LSE', 'GER', 'MIL', 'FRA'. If
     omitted, it will prompt for interactive selection.
-    '''
+    """
 
     # curl string to obtain the yahoo symbols given the fund name
     curlstr = "curl 'https://query1.finance.yahoo.com/v1/finance/search?q=" + fund_isin + "&lang=en-US&region=US&quotesCount=6&newsCount=4&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query&newsQueryId=news_cie_vespa&enableCb=true&enableNavLinks=true&enableEnhancedTrivialQuery=true' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:82.0) Gecko/20100101 Firefox/82.0' -H 'Accept: */*' -H 'Accept-Language: en-US,en;q=0.5' --compressed -H 'Referer: https://finance.yahoo.com/screener?.tsrc=fin-srch' -H 'Origin: https://finance.yahoo.com' -H 'Connection: keep-alive' -H 'Cookie: B=bvg32mtd9ql9o&b=3&s=uq; GUC=AQABAgFfO-NgIUIgrgSo; PRF=t%3DVGWL.F%252BVDVA.L%252BVVAL.AS%252BVVAL.L%252BVVL.TO%252BZPRX.DE%252BEURUSD%253DX%252B%255EGSPC%252BES%253DF%252BBRK-B%252BBRKB%252BWORK%252BVEIEX%252BXDEV.DE%252BVVAL.SW%26qct%3DtrendArea; ucs=eup=2; A1=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk; A3=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk; A1S=d=AQABBPVPhl4CEJQlhU7jN3yvYRgayeLumysFEgABAgHjO18hYO2Nb2UBACAAAAcIOFWdWrdiwL8&S=AQAAAji0MRIc7MuC98UsHfOepqk&j=GDPR; thamba=1' -H 'Pragma: no-cache' -H 'Cache-Control: no-cache' -H 'TE: Trailers'"
@@ -97,47 +97,68 @@ def get_yahoo_fund_currency(fund_symbol):
 
 
 def get_yahoo_price_data(fund_symbol, cache_dir='price\\'):
+    # try to load the price data from file, if not skip to next
     try:
-        price = pd.read_pickle(cache_dir + fund_symbol)
-    except:
-        price = pd.read_csv('https://query1.finance.yahoo.com/v7/finance/download/' +
-                            fund_symbol + '?period1=0&period2=10000000000&interval=1d&events=history&includeAdjustedClose=true',
-                            header=0, names=['Date', 'Open', 'High', 'Low', 'Close', 'NAV', 'Volume'],
-                            usecols=['Date', 'NAV'], index_col=['Date'])
-        price.index = pd.to_datetime(price.index).to_period("B")
-        price.to_pickle(cache_dir + fund_symbol)
+        return pd.read_pickle(cache_dir + fund_symbol.upper())
+    except FileNotFoundError:
+        pass
 
-    print('Price data interval: ' + str(price.index[0]) + ' to ' + str(price.index[-1]))
+    # read the price data
+    price = pd.read_csv('https://query1.finance.yahoo.com/v7/finance/download/' + fund_symbol +
+                        '?period1=0&period2=10000000000&interval=1d&events=history&includeAdjustedClose=true',
+                        index_col=['Date'])['Adj Close'].rename('Price')
+    price.index = pd.to_datetime(price.index).to_period("B")
+
+    # save the price data to file
+    price.to_pickle(cache_dir + fund_symbol.upper())
+
+    print(fund_symbol.upper() + ' price data interval: ' + str(price.index[0]) + ' to ' + str(price.index[-1]))
+
     return price
 
 
 def get_av_price_data(fund_symbol, cache_dir='price\\'):
+    # try to load the price data from file, if not skip to next
     try:
-        price = pd.read_pickle(cache_dir + fund_symbol)
-    except:
-        if not os.getenv('ALPHAVANTAGE_API_KEY'):
-            raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable!")
-        price = web.DataReader(fund_symbol, 'av-daily-adjusted')['adjusted close'].to_frame(name='NAV')
-        price.index = pd.to_datetime(price.index).to_period("B")
-        price.index.name = 'Date'
-        price.to_pickle(cache_dir + fund_symbol)
+        return pd.read_pickle(cache_dir + fund_symbol.upper())
+    except FileNotFoundError:
+        pass
 
-    print('Price data interval: ' + str(price.index[0]) + ' to ' + str(price.index[-1]))
+    # check that an alphavantage API key is set in the system environment variables
+    if not os.getenv('ALPHAVANTAGE_API_KEY'):
+        raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable!")
+
+    # read the price data
+    price = web.DataReader(fund_symbol.upper(), 'av-daily-adjusted')['adjusted close'].rename('Price')
+    price.index = pd.to_datetime(price.index).to_period("B")
+    price.index.name = 'Date'
+
+    # save the price data to file
+    price.to_pickle(cache_dir + fund_symbol.upper())
+
+    print(fund_symbol.upper() + ' price data interval: ' + str(price.index[0]) + ' to ' + str(price.index[-1]))
+
     return price
 
 
 def get_av_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
-    # get the EUR/USD rate data
+    # try to load the currency conversion data from file, if not skip
     try:
-        fx = pd.read_pickle(cache_dir + base_currency + '-' + to_currency)
-    except:
-        if not os.getenv('ALPHAVANTAGE_API_KEY'):
-            raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable!")
-        fx = web.DataReader(base_currency + '/' + to_currency,
-                            'av-forex-daily')['close'].to_frame(name='FX')
-        fx.index = pd.to_datetime(fx.index).to_period("B")
-        fx.index.name = 'Date'
-        fx.to_pickle(cache_dir + base_currency + '-' + to_currency)
+        return pd.read_pickle(cache_dir + base_currency + '-' + to_currency)
+    except FileNotFoundError:
+        pass
+
+    # check that an alphavantage API key is set in the system environment variables
+    if not os.getenv('ALPHAVANTAGE_API_KEY'):
+        raise Exception("Please set 'ALPHAVANTAGE_API_KEY' environment variable!")
+
+    # read the currency data
+    fx = web.DataReader(base_currency + '/' + to_currency, 'av-forex-daily')['close'].rename('FX')
+    fx.index = pd.to_datetime(fx.index).to_period("B")
+    fx.index.name = 'Date'
+
+    # save the currency data to file
+    fx.to_pickle(cache_dir + base_currency + '-' + to_currency)
 
     return fx
 
@@ -387,67 +408,7 @@ def run_fund_regression(fund_symbol, fund_isin, freq):
     return calc_famafrench_regression(factor_data, ret, fund_symbol)
 
 
-def main():
-    # get fund price data file
-    fund_info = pd.DataFrame(glob('nav data\\*.csv'), columns=['FilePath'])
-
-    # extract ISIN from filename
-    fund_info.index = fund_info.apply(lambda row: ntpath.splitext(ntpath.basename(row.FilePath))[0].split('-')[0],
-                                      axis=1)
-
-    # initialize dataframe for daily regression results
-    reg_daily = pd.DataFrame()
-
-    # initialize dataframe for monthly regression results
-    reg_monthly = pd.DataFrame()
-
-    for fund in fund_info.itertuples():
-
-        print('\nNow processing ' + fund.Index)
-
-        # retrieve fama-french daily factor data
-        factor_data_daily = get_fund_factor_data(fund.Index, freq='daily')
-
-        # retrieve fama-french monthly factor data
-        factor_data_monthly = get_fund_factor_data(fund.Index, freq='monthly')
-
-        # read the price data
-        price = get_csv_price_data(fund.FilePath)
-
-        fund_currency = ntpath.splitext(ntpath.basename(fund.FilePath))[0].split('-')[1]
-
-        # currency conversion of non USD price
-        if fund_currency != 'USD':
-            price = convert_price_to_usd(price, fund_currency)
-
-        # calculate daily returns
-        ret_daily = calc_return(price, freq='daily')
-
-        # calculate monthly returns
-        ret_monthly = calc_return(price, freq='monthly')
-
-        # calculating regression
-        reg_daily = reg_daily.append(
-            calc_famafrench_regression(factor_data_daily, ret_daily, fund.Index, quiet=True))
-
-        # calculating regression
-        reg_monthly = reg_monthly.append(
-            calc_famafrench_regression(factor_data_monthly, ret_monthly, fund.Index, quiet=True))
-
-    print('\nDaily Factor Regression Results')
-    print(reg_daily)
-    print('\nMonthly Factor Regression Results')
-    print(reg_monthly)
-
-    # append monthly regression results when daily results are missing
-    reg_daily.append(reg_monthly[~reg_monthly.index.isin(reg_daily.index)]).to_csv('results\\reg_daily.csv',
-                                                                                   encoding='utf-8', index_label='ISIN')
-
-    # export regression results to csv
-    reg_monthly.to_csv('results\\reg_monthly.csv', encoding='utf-8', index_label='ISIN')
-
-
-def run_regression_eur():
+def run_regression(currency='EUR'):
     # get fund price data file
     fund_info = pd.DataFrame(glob('nav data\\*.csv'), columns=['FilePath'])
 
@@ -465,10 +426,12 @@ def run_regression_eur():
         print('\nNow processing ' + get_morningstar_fund_name(isin))
 
         # retrieve fama-french daily factor data
-        factor_data_daily = convert_factor_data_to_eur(get_fund_factor_data(isin, freq='daily'))
+        factor_data_daily = (convert_factor_data_to_eur(get_fund_factor_data(isin, freq='daily'))
+                             if currency.upper() == 'EUR' else get_fund_factor_data(isin, freq='daily'))
 
         # retrieve fama-french monthly factor data
-        factor_data_monthly = convert_factor_data_to_eur(get_fund_factor_data(isin, freq='monthly'))
+        factor_data_monthly = (convert_factor_data_to_eur(get_fund_factor_data(isin, freq='monthly'))
+                               if currency.upper() == 'EUR' else get_fund_factor_data(isin, freq='monthly'))
 
         # read the price data
         price = get_csv_price_data(fund.FilePath)
@@ -501,12 +464,18 @@ def run_regression_eur():
     print('\nMonthly Factor Regression Results')
     print(reg_monthly)
 
-    # append monthly regression results when daily results are missing
-    reg_daily.append(reg_monthly[~reg_monthly.index.isin(reg_daily.index)]).to_csv('results\\reg_daily_eur.csv',
-                                                                                   encoding='utf-8', index_label='ISIN')
+    suffix = ('_eur' if currency.upper() == 'EUR' else '_usd')
 
-    # export regression results to csv
-    reg_monthly.to_csv('results\\reg_monthly_eur.csv', encoding='utf-8', index_label='ISIN')
+    # append monthly regression results when daily results are missing
+    # reg_daily = reg_daily.append(reg_monthly[~reg_monthly.index.isin(reg_daily.index)])
+
+    # export daily regression results to csv
+    reg_daily.to_csv('results\\reg_daily' + suffix + '.csv', encoding='utf-8', index_label='ISIN')
+
+    # export monthly regression results to csv
+    reg_monthly.to_csv('results\\reg_monthly' + suffix + '.csv', encoding='utf-8', index_label='ISIN')
+
 
 if __name__ == '__main__':
-    run_regression_eur()
+    run_regression(currency='EUR')
+    # run_regression(currency='USD')
