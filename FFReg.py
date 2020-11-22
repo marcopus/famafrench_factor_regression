@@ -300,22 +300,27 @@ def get_famafrench_data(name_factor_data, name_mom_data, cache_dir='famafrench\\
     if name_factor_data:
         try:
             factor_data = pd.read_pickle(cache_dir + name_factor_data)
-        except:
+        except FileNotFoundError:
             factor_data = web.DataReader(name_factor_data, 'famafrench')[0] / 100
             factor_data.to_pickle(cache_dir + name_factor_data)
+
         if name_mom_data:
             try:
                 mom_data = pd.read_pickle(cache_dir + name_mom_data)
-            except:
+            except FileNotFoundError:
                 mom_data = web.DataReader(name_mom_data, 'famafrench')[0] / 100
                 mom_data.to_pickle(cache_dir + name_mom_data)
             if 'WML' not in mom_data.columns:
                 mom_data = mom_data.iloc[:, 0].to_frame(name='WML')
+
+            # merge the momentum with the other factors
             factor_data = factor_data.merge(mom_data, left_index=True, right_index=True)
+
         if 'period' not in str(factor_data.index.dtype):
             factor_data.index = factor_data.index.to_period("B")
     else:
         factor_data = pd.DataFrame()
+
     return factor_data
 
 
