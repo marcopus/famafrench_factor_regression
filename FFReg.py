@@ -458,19 +458,19 @@ def run_fund_regression(fund_symbol, fund_isin, freq, currency, quiet=False):
     return calc_famafrench_regression(factor_data, ret, fund_symbol, quiet=quiet)
 
 
-def run_regressions(currency='EUR', fund_info=pd.read_excel('..//Instruments.xlsx', sheet_name='Equity', index_col=0)):
+def run_regressions(currency='EUR', freq='daily', fund_info=pd.read_excel('..//Instruments.xlsx', sheet_name='Equity', index_col=0)):
     # initialize dataframe for regression results
     reg = pd.DataFrame()
 
     for fund in fund_info.itertuples():
         if isinstance(fund.Symbol, str):
-            reg = reg.append(run_fund_regression(fund.Symbol, fund.Index, freq='daily', currency='EUR', quiet=True))
+            reg = reg.append(run_fund_regression(fund.Symbol, fund.Index, freq=freq, currency='EUR', quiet=True))
 
     print('\nFactor Regression Results')
     print(reg)
 
     suffix = (currency.lower() if currency.upper() == 'EUR' else currency.lower())
-    reg.to_csv('results\\reg_all_daily_' + suffix + '.csv', encoding='utf-8', index_label='ISIN')
+    reg.to_csv('results\\reg_all_' + freq + '_' + suffix + '.csv', encoding='utf-8', index_label='ISIN')
 
     return reg
 
