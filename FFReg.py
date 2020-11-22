@@ -435,7 +435,7 @@ def run_fund_regression(fund_symbol, fund_isin, freq, currency, quiet=False):
 
     # get the fund price data and possibly update the symbol
     price, fund_symbol = get_yahoo_price_data(fund_symbol)
-    # price = get_av_price_data(fund_symbol)
+
     if price.empty:
         return pd.DataFrame()
 
