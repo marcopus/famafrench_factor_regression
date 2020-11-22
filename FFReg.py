@@ -141,7 +141,7 @@ def get_av_price_data(fund_symbol, cache_dir='price\\'):
     return price
 
 
-def get_av_forex_data(base_currency='EUR', to_currency='USD', cache_dir='forex\\'):
+def get_av_forex_data(base_currency, to_currency, cache_dir='forex\\'):
     # try to load the currency conversion data from file, if not skip
     try:
         return pd.read_pickle(cache_dir + base_currency + '-' + to_currency)
@@ -175,7 +175,7 @@ def get_excel_price_data(file):
 
 def get_csv_price_data(file):
     # read the price data from file
-    price = pd.read_csv(file, index_col=0)
+    price = pd.read_csv(file, index_col=0).iloc[:, 0].rename('Price')
 
     # convert the index to date period format
     price.index = pd.to_datetime(price.index, format='%Y%m%d').to_period("B")
@@ -266,22 +266,11 @@ def convert_factor_data_to_eur(factor_data):
     return factor_data_eur
 
 
-def convert_price_to_usd(price, fund_currency):
-    fx = get_av_forex_data(base_currency=fund_currency)
-    price = price.merge(fx, left_on='Date', right_on='Date')
-    price.NAV = price.NAV * price.FX
-    price.drop('FX', axis=1, inplace=True)
+def convert_price_currency(price, fund_currency, to_currency):
+    fx = get_av_forex_data(base_currency=fund_currency, to_currency=to_currency)
+    df = pd.merge(price, fx, left_index=True, right_index=True)
 
-    return price
-
-
-def convert_price_to_eur(price, fund_currency):
-    fx = get_av_forex_data(base_currency=fund_currency, to_currency='EUR')
-    price = price.merge(fx, left_on='Date', right_on='Date')
-    price.NAV = price.NAV * price.FX
-    price.drop('FX', axis=1, inplace=True)
-
-    return price
+    return (df.Price * df.FX).rename('Price')
 
 
 def calc_return(price, freq):
@@ -392,9 +381,14 @@ def get_fund_factor_data(fund_isin, freq):
     return get_famafrench_data(name_factor_data, name_mom_data)
 
 
-def run_fund_regression(fund_symbol, fund_isin, freq):
-    # retrieve fama-french daily factor data
-    factor_data = get_fund_factor_data(fund_isin, freq=freq)
+def run_fund_regression(fund_symbol, fund_isin, freq, currency):
+    # check requested currency for regression
+    if currency not in ['EUR', 'USD']:
+        raise Exception("currency for regression must be either 'EUR' or 'USD'!")
+
+    # retrieve fama-french daily factor data, convert currency if needed
+    factor_data = (get_fund_factor_data(fund_isin, freq=freq) if currency.upper() == 'USD' else
+                   convert_factor_data_to_eur(get_fund_factor_data(fund_isin, freq=freq)))
 
     # get the fund price data
     price = get_av_price_data(fund_symbol)
@@ -402,9 +396,14 @@ def run_fund_regression(fund_symbol, fund_isin, freq):
     # get the fund currency
     fund_currency = get_yahoo_fund_currency(fund_symbol)
 
-    # currency conversion of non USD price
-    if fund_currency != 'USD':
-        price = convert_price_to_usd(price, fund_currency)
+    if currency == 'USD':
+        if fund_currency != 'USD':
+            # currency conversion of non USD price (if currency == 'USD')
+            price = convert_price_currency(price, fund_currency, to_currency='USD')
+    elif currency == 'EUR':
+        if fund_currency != 'EUR':
+            # currency conversion of non EUR price (if currency == 'EUR')
+            price = convert_price_currency(price, fund_currency, to_currency='EUR')
 
     # calculate daily returns
     ret = calc_return(price, freq=freq)
@@ -446,7 +445,7 @@ def run_regression(currency='EUR'):
 
         # currency conversion of non EUR price
         if fund_currency != 'EUR':
-            price = convert_price_to_eur(price, fund_currency)
+            price = convert_price_currency(price, fund_currency, to_currency='EUR')
 
         if not factor_data_daily.empty:
             # calculate daily returns
