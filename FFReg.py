@@ -355,7 +355,7 @@ def calc_famafrench_regression(factor_data, fund_data, fund_symbol, quiet=False)
         x['Return-RF'] = x['Return'] - x['RF']
         y = x['Return-RF']
         x = x.drop(['RF', 'Return', 'Return-RF'], axis=1)
-        x = sm.add_constant(x)
+        x = sm.add_constant(x[['Mkt-RF', 'SMB', 'HML', 'WML']])
 
         model = sm.OLS(y, x).fit(cov_type='HAC', cov_kwds={'maxlags': 1})
         model.predict(x)
@@ -367,6 +367,7 @@ def calc_famafrench_regression(factor_data, fund_data, fund_symbol, quiet=False)
         reg.insert(0, 'N', int(model.nobs))
         if not quiet:
             print(model.summary())
+            print('Based on: ' + str(y.index[0]) + ' to ' + str(y.index[-1]))
         return reg
     else:
         return pd.DataFrame()
@@ -475,15 +476,12 @@ def run_regressions(currency='EUR', freq='daily', fund_info=pd.read_excel('..//I
     return reg
 
 
-def run_regressions_local_data(currency='EUR', prices_dir='nav data\\'):
+def run_regressions_local_data(currency='EUR', freq='daily', prices_dir='nav data\\'):
     # get fund price data file
     fund_info = pd.DataFrame(glob(prices_dir + '*.csv'), columns=['FilePath'])
 
-    # initialize dataframe for daily regression results
-    reg_daily = pd.DataFrame()
-
-    # initialize dataframe for monthly regression results
-    reg_monthly = pd.DataFrame()
+    # initialize dataframe for regression results
+    reg = pd.DataFrame()
 
     for fund in fund_info.itertuples():
 
@@ -492,13 +490,9 @@ def run_regressions_local_data(currency='EUR', prices_dir='nav data\\'):
 
         print('\nNow processing ' + get_morningstar_fund_name(isin))
 
-        # retrieve fama-french daily factor data
-        factor_data_daily = (convert_factor_data_to_eur(get_fund_factor_data(isin, freq='daily'))
-                             if currency.upper() == 'EUR' else get_fund_factor_data(isin, freq='daily'))
-
-        # retrieve fama-french monthly factor data
-        factor_data_monthly = (convert_factor_data_to_eur(get_fund_factor_data(isin, freq='monthly'))
-                               if currency.upper() == 'EUR' else get_fund_factor_data(isin, freq='monthly'))
+        # retrieve fama-french factor data
+        factor_data = (convert_factor_data_to_eur(get_fund_factor_data(isin, freq=freq))
+                       if currency.upper() == 'EUR' else get_fund_factor_data(isin, freq=freq))
 
         # read the price data
         price = get_csv_price_data(fund.FilePath)
@@ -510,38 +504,21 @@ def run_regressions_local_data(currency='EUR', prices_dir='nav data\\'):
         if fund_currency != 'EUR':
             price = convert_price_currency(price, fund_currency, to_currency='EUR')
 
-        if not factor_data_daily.empty:
-            # calculate daily returns
-            ret_daily = calc_return(price, freq='daily')
+        if not factor_data.empty:
+            # calculate returns
+            ret = calc_return(price, freq=freq)
 
             # calculating regression
-            reg_daily = reg_daily.append(
-                calc_famafrench_regression(factor_data_daily, ret_daily, isin, quiet=True))
+            reg = reg.append(calc_famafrench_regression(factor_data, ret, isin, quiet=True))
 
-        # calculate monthly returns
-        ret_monthly = calc_return(price, freq='monthly')
-
-        # calculating regression
-        reg_monthly = reg_monthly.append(
-            calc_famafrench_regression(factor_data_monthly, ret_monthly, isin, quiet=True))
-
-    print('\nDaily Factor Regression Results')
-    print(reg_daily)
-
-    print('\nMonthly Factor Regression Results')
-    print(reg_monthly)
+    print('\nFactor Regression Results')
+    print(reg)
 
     suffix = ('_eur' if currency.upper() == 'EUR' else '_usd')
 
-    # append monthly regression results when daily results are missing
-    # reg_daily = reg_daily.append(reg_monthly[~reg_monthly.index.isin(reg_daily.index)])
-
     # export daily regression results to csv
-    reg_daily.to_csv('results\\reg_daily' + suffix + '.csv', encoding='utf-8', index_label='ISIN')
-
-    # export monthly regression results to csv
-    reg_monthly.to_csv('results\\reg_monthly' + suffix + '.csv', encoding='utf-8', index_label='ISIN')
+    reg.to_csv('results\\reg_' + freq + suffix + '.csv', encoding='utf-8', index_label='ISIN')
 
 
 if __name__ == '__main__':
-    run_regressions_local_data(currency='EUR')
+    run_regressions_local_data(currency='EUR', freq='monthly')
