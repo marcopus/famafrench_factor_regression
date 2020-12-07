@@ -1,5 +1,5 @@
 # famafrench_factor_regression
-Run regression analysis of funds against Fama-French factors
+Run fund regression analysis against the Fama-French factors
 
 ## Usage
 `run_fund_regression(fund_symbol, fund_isin, freq, currency, quiet=False)`
